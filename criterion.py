@@ -15,17 +15,30 @@ criterion_ingredient = Ingredient('criterion')
 
 @criterion_ingredient.config
 def cfg():
-    loss   = 'logbce' # logbce / focal (default: logbce)
-    weight = 'log'    # log / linear / none (default: log)
-
+    loss   = 'contrastive' # logbce / focal (default: logbce)
 
 @criterion_ingredient.capture
-def load_loss(label_count, loss):
-    weight = get_weight(label_count)
-    if loss == 'focal': return focal_loss
-    else: return nn.BCEWithLogitsLoss(weight=weight).cuda()
+def load_loss(loss):
+    if loss == 'contrastive': return contrastiveLoss
+    else: return contrastiveLoss
 
+# ==========================
+def contrastiveLoss(output, target, margin=2.0):
+    output1, output2 = output
+    euclid_dist = F.pairwise_distance(output1, output2).float()
+    loss = torch.mean((1-target) * torch.pow(euclid_dist, 2)
+                      + (target) * torch.pow(torch.clamp(margin - euclid_dist, min=0.0), 2))
+    return loss
 
+# ==========================
+def focal_loss(output, target, alpha=0.25, gamma=2):
+    x, p, t = output, output.sigmoid(), target
+    pt = p*t + (1-p)*(1-t)         # pt = p if t > 0 else 1-p
+    w = alpha*t + (1-alpha)*(1-t)  # w = alpha if t > 0 else 1-alpha
+    w = w * (1-pt).pow(gamma)
+    return F.binary_cross_entropy_with_logits(x, t, w, size_average=False)
+
+# ==========================
 @criterion_ingredient.capture
 def get_weight(label_count, weight, mu=0.5):
     total = np.sum(list(label_count.values()))
@@ -50,17 +63,6 @@ def get_weight(label_count, weight, mu=0.5):
 
     return torch.FloatTensor(list(class_weight.values())).cuda()
 
-
-# =========================
-def focal_loss(output, target, alpha=0.25, gamma=2):
-    x, p, t = output, output.sigmoid(), target
-    pt = p*t + (1-p)*(1-t)         # pt = p if t > 0 else 1-p
-    w = alpha*t + (1-alpha)*(1-t)  # w = alpha if t > 0 else 1-alpha
-    w = w * (1-pt).pow(gamma)
-    return F.binary_cross_entropy_with_logits(x, t, w, size_average=False)
-
-
-# ==========================
 class mean_aggregator():
     def __init__(self, loss_func):
         self.loss_func = loss_func

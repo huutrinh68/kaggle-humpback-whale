@@ -1,6 +1,5 @@
-from torchvision import models
-from pretrainedmodels.models import bninception
-from torch import nn
+from cnn_finetune import make_model
+import torch.nn as nn
 
 # local import
 from sacred import Ingredient
@@ -10,58 +9,64 @@ model_ingredient = Ingredient('model', ingredients=[data_ingredient])
 
 @model_ingredient.config
 def cfg():
-    model = 'resnet18' # resnet18 / resnet34 / bninception / seres50, default: bninception
-
+    backbone = 'resnet18' # resnet18 / resnet34 / bninception / seres50, default: bninception
 
 @model_ingredient.capture
-def load_model(model, data):
-    n_classes  = data['n_classes']
-    n_channels = data['n_channels']
-    if   model == 'resnet34': return _get_net_resnet34(n_channels, n_classes)
-    elif model == 'resnet18': return _get_net_resnet18(n_channels, n_classes)
-    elif model == 'seres50' : return _get_net_seres50(n_channels, n_classes)
-    else: return _get_net_bninception(n_channels, n_classes)
+def load_model(backbone, data):
+    return Siamese(backbone,
+                   image_size=(data['image_size'],
+                               data['image_size']))
+
+def compute_head_features(x, y):
+    x1 = x * y
+    x2 = x + y
+    x3 = (x - y).abs_()
+    x4 = (x - y) * (x - y)
+    x = torch.cat([x1, x2, x3, x4], 1)
+    return x
+
+class Siamese(nn.Module):
+    def __init__(self, backbone='resnet18', image_size=(224, 224)):
+        super().__init__()
+        backbone = make_model(
+            model_name=backbone,
+            pretrained=True,
+            num_classes=1
+        )._features
+        backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.backbone = backbone
+        self.feature_dims = 512
+
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=self.feature_dims, out_features=1),
+        )
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=(1, 4), padding=0, stride=1)
+        self.conv2 = nn.Conv2d(1, 1, kernel_size=(32, 1), padding=0, stride=1)
 
 
-# =======================
-# get_net functions
-def _get_net_bninception(n_channels, n_classes):
-    _model = bninception(pretrained="imagenet")
-    new_features = nn.Sequential(*list(_model.children()))
-    new_features[0] = nn.Conv2d(n_channels, 64, kernel_size=(7, 7),
-                                stride=(2, 2), padding=(3, 3))
-    _model.global_pool = nn.AdaptiveAvgPool2d(1)
-    _model.conv1_7x7_s2 = new_features[0]
-    _model.last_linear = nn.Sequential(nn.BatchNorm1d(1024),
-                                      nn.Dropout(0.5),
-                                      nn.Linear(1024, n_classes))
-    return _model
+    def forward(self, xa, xb):
+        # Get features
+        feature_a = self.get_features(xa)
+        feature_b = self.get_features(xb)
 
+        return feature_a, feature_b
+        # score = self.get_score(feature_a, feature_b)
+        # return score, feature_a, feature_b
 
-def _get_net_resnet34(n_channels, n_classes):
-    _model = models.resnet34(pretrained='imagenet')
-    _model.conv1 = nn.Conv2d(n_channels, 64, kernel_size=(7, 7),
-                            stride=(2, 2), padding=(3, 3), bias=False)
-    _model.avgpool = nn.AdaptiveAvgPool2d(1)
-    num_ftrs = _model.fc.in_features
-    _model.fc = nn.Linear(num_ftrs, n_classes)
-    return _model
+    def get_features(self, x):
+        x = self.backbone(x)
+        return x.reshape(*x.shape[:2], -1).max(-1)[0]
 
+    # def get_score(self, feature_a, feature_b):
+    #     # Make head features
+    #     head_features = compute_head_features(feature_a, feature_b)
 
-def _get_net_resnet18(n_channels, n_classes):
-    _model = models.resnet18(pretrained='imagenet')
-    _model.conv1 = nn.Conv2d(n_channels, 64, kernel_size=(7, 7),
-                            stride=(2, 2), padding=(3, 3), bias=False)
-    _model.avgpool = nn.AdaptiveAvgPool2d(1)
-    num_ftrs = _model.fc.in_features
-    _model.fc = nn.Linear(num_ftrs, n_classes)
-    return _model
+    #     head_features = head_features.view(-1, 1, self.feature_dims, 4)
+    #     head_features = F.relu(self.conv1(head_features))
+    #     head_features = head_features.view(-1, 1, 32, self.feature_dims)
+    #     head_features = F.relu(self.conv2(head_features))
+    #     head_features = head_features.view(-1, self.feature_dims)
 
-
-def _get_net_seres50(n_channels, n_classes):
-    _model = pretrainedmodels.models.se_resnet50(pretrained='imagenet')
-    _model.layer0.conv1 = nn.Conv2d(n_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-    _model.avg_pool = nn.AdaptiveAvgPool2d(1) 
-    num_ftrs = _model.last_linear.in_features
-    _model.last_linear = nn.Linear(num_ftrs, n_classes)
-    return _model
+    #     score = self.classifier(head_features)
+    #     score = torch.sigmoid(score)
+    #     return score

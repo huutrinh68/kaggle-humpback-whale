@@ -1,28 +1,15 @@
-import pathlib
-import gc
 import cv2
 import random
-import torch
-import torchvision
 import numpy as np
 import pandas as pd
-import torchvision.datasets as dset
-import matplotlib.pyplot as plt
-import imgaug as ia
 
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-from PIL import ImageOps
-from torch.utils.data import Dataset
 from torchvision import transforms as T
 from imgaug import augmenters as iaa
-from collections import OrderedDict
-from scipy.ndimage import affine_transform
-from tqdm import tqdm
 from keras.preprocessing.image import ImageDataGenerator
 
 # local import
-from utils import get_multihot, imshow, show_plot
+from utils import imshow
 from sacred import Ingredient, Experiment
 from path import path_ingredient
 from metadata import meta_ingredient, create_p2size, create_p2h, \
@@ -44,7 +31,7 @@ iaa_dict = {'rot90' : iaa.Affine(rotate=90),
 def cfg():
     image_size = 512            # image size
     n_workers  = 4              # num of loader workers
-    batch_size = 8             # batch size
+    batch_size = 40             # batch size
     augment    = True           # train augment
     n_tta      = 3              # num of tta aug actions
     anisotropy = 2.15
@@ -53,16 +40,14 @@ def cfg():
     same_ratio = 0.5
     # aug_train  = ['noop', 'rot90', 'rot180', 'rot270', 'shear',
     #               'flipud', 'fliplr']                             # train aug actions
-    aug_train  = ['noop', 'fliplr', 'shear']
-    aug_tta    = ['noop', 'flipud', 'fliplr', 'rot90', 'rot-90']  # tta aug actions
-
+    # aug_train  = ['noop', 'fliplr', 'shear']
+    # aug_tta    = ['noop', 'flipud', 'fliplr', 'rot90', 'rot-90']  # tta aug actions;
 
 # ============== cropDataGenerator ========
 # =========================================
 class cropDataGenerator():
     @data_ingredient.capture
-    def __init__(self, path, aug_train, crop_margin,
-                 anisotropy, image_size):
+    def __init__(self, path, crop_margin, anisotropy, image_size):
         TRAIN_DF = path['root'] + path['train_csv']
         SUB_DF   = path['root'] + path['sample_submission']
         BB_DF    = path['root'] + path['bbox']
@@ -71,7 +56,6 @@ class cropDataGenerator():
         self.join   = list(self.tagged.keys()) + self.submit
         self.p2h    = create_p2h(self.join)
         self.p2bb   = pd.read_csv(BB_DF).set_index("Image")
-        self.aug_train   = aug_train
         self.crop_margin = crop_margin
         self.anisotropy  = anisotropy
         self.image_size  = image_size
@@ -117,7 +101,8 @@ class cropDataGenerator():
         if x1 > size_x: x1 = size_x
         if y1 > size_y: y1 = size_y
 
-        img = img[int(y0):int(y1), int(x0):int(x1)]
+        if y1 > y0 and x1 > x0:
+            img = img[int(y0):int(y1), int(x0):int(x1)]
 
         # Resize and normalize
         y, x = img.shape
@@ -178,11 +163,11 @@ class SiameseDataset(Dataset):
         if should_choose_same < self.same_ratio:
             a = self.train[index]
             b = self.get_match(index)
-            c = 1
+            c = 0
         else:
             a = self.train[index]
             b = self.get_unmatch(index)
-            c = 0
+            c = 1
 
         if self.mode == 'train':
             a = self.data_reader.read_for_training(a).copy()
@@ -212,10 +197,9 @@ class SiameseDataset(Dataset):
         return T.Compose([T.ToTensor()])(X).float()
 
 @data_ingredient.capture
-def create_loader_siamese(siameseDataset, batch_size, n_workers):
+def create_siamese_loader(siameseDataset, batch_size, n_workers):
     data_reader     = cropDataGenerator()
     siamese_dataset = SiameseDataset(data_reader, 'train')
-
     return DataLoader(siameseDataset, shuffle=True,
                       num_workers=n_workers, batch_size=batch_size)
 
