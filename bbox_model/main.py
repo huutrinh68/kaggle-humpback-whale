@@ -119,7 +119,8 @@ def main():
             v1 = min(v1, img.size[1])
             p2bb[p]           = (u0, v0, u1, v1)
 
-    with open('cropping.txt', 'w') as f:
+    with open('./input/cropping.csv', 'w') as f:
+        f.write('Image, x0, y0, x1, y1\n')
         for p in p2bb:
             u0, v0, u1, v1 = p2bb[p]
             f.write('{},{},{},{},{}\n'.format(str(p),
