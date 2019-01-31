@@ -6,7 +6,7 @@ import numpy as np
 from torch import nn
 from collections import OrderedDict
 from sklearn.metrics import confusion_matrix
-import torch.nn.functional as F
+import torch.nn as F
 
 # sacred import
 from sacred import Ingredient
@@ -23,11 +23,11 @@ def load_loss(loss):
     else: return contrastiveLoss
 
 # ==========================
-def contrastiveLoss(output, target, margin=2.0):
+def contrastiveLoss(output, target, margin=0.01):
     output1, output2 = output
-    euclid_dist = F.pairwise_distance(output1, output2).float()
-    loss = torch.mean((1-target) * torch.pow(euclid_dist, 2)
-                      + (target) * torch.pow(torch.clamp(margin - euclid_dist, min=0.0), 2))
+    cosine_dist = nn.CosineSimilarity()(output1, output2)
+    loss = torch.mean((1-target) * torch.pow(cosine_dist, 2)
+                      + (target) * torch.pow(torch.clamp(margin - cosine_dist, min=0.0), 2))
     return loss
 
 # ==========================
