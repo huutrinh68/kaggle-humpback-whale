@@ -20,14 +20,24 @@ def cfg():
 @criterion_ingredient.capture
 def load_loss(loss):
     if loss == 'contrastive': return contrastiveLoss
+    elif loss == 'binomial': return binomialDevianceLoss
     else: return contrastiveLoss
 
 # ==========================
-def contrastiveLoss(output, target, margin=0.01):
-    output1, output2 = output
-    cosine_dist = nn.CosineSimilarity()(output1, output2)
-    loss = torch.mean((1-target) * torch.pow(cosine_dist, 2)
-                      + (target) * torch.pow(torch.clamp(margin - cosine_dist, min=0.0), 2))
+def contrastiveLoss(output, target, margin=10e-8, mul=10e3):
+    margin *= mul
+    loss = torch.mean((1-target) * torch.pow(output, 2)
+                      + (target) * torch.pow(torch.clamp(margin - output, min=0.0), 2))
+    loss *= mul
+    return loss
+
+# ==========================
+def binomialDevianceLoss(output, target, beta1=1, beta2=10e-3, mul=10e1):
+    # loss of
+    # Positive sample (different class, target = 1) will be weighted by 25
+    # Positive sample (same class,      target = 0) will be weighted by 1
+    balancer = target * 24 + 1
+    loss = mul * torch.mean(torch.log(1 + torch.exp((2*target - 1) * beta1 * (output - beta2) * balancer)))
     return loss
 
 # ==========================

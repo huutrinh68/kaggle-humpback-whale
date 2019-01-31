@@ -58,52 +58,6 @@ def init(_run, seed, path):
 
     return device
 
-@ex.capture
-def optimize_threshold(predict_proba, target, thresholds):
-    best_thredshold = 0
-    best_f1 = -np.inf
-    for threshold in tqdm(thresholds, ncols=0):
-        predict = predict_proba > threshold
-        macro_f1_score = f1_score(target, predict, average='macro')
-        if macro_f1_score > best_f1:
-            best_f1 = macro_f1_score
-            best_threshold = threshold
-    logging.info('best_threshold is {} with val f1 score = {}'.format(best_threshold, best_f1))
-    return best_threshold
-
-@ex.capture
-def make_prediction(predict_proba, threshold):
-    predicts = predict_proba > threshold
-    submissions = []
-    for i in range(predicts.shape[0]):
-        _pred = predicts[i, :]
-        pred = list(np.where(_pred.ravel() > threshold)[0].ravel())
-        if len(pred) == 0: pred = [np.argmax(_pred.ravel())]
-        submissions.append(pred)
-    return submissions
-
-@ex.capture
-def voting(preds, nvoters):
-    predict_set = set(preds)
-    final_pred = [v for v in predict_set if preds.count(v) > nvoters / 2]
-    return final_pred
-
-@ex.capture
-def preds_to_str(preds):
-    return ' '.join([str(v) for v in preds])
-
-@ex.capture
-def voting_ensemble(ensemble_submissions):
-    n_model = len(ensemble_submissions)
-    n_pred  = len(ensemble_submissions[0])
-    final_preds = []
-    for k in range(n_pred):
-        preds = []
-        for i in range(n_model):
-            preds += ensemble_submissions[i][k]
-        final_preds.append(preds_to_str(voting(preds, n_model)))
-    return final_preds
-
 @ex.main
 def main(_log, code, data, path, seed, threshold, find_threshold, debug):
     device = init()
@@ -114,52 +68,25 @@ def main(_log, code, data, path, seed, threshold, find_threshold, debug):
         else:
             model = load_model().to(device)
 
-        test_loader, val_loader = create_test_loader(fold=fold, n_fold = data['n_fold'],
-                                                     seed=seed, debug=debug)
+    # Data
+    train_siamese_loader, val_siamese_loader = create_siamese_loader()
 
-        test_tester = Tester(
-            alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
-            code = code, fold=fold, model=model, test_dataloader=test_loader,
-        )
+    # Loss function
+    loss_func = load_loss()
 
-        val_tester = Tester(
-            alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
-            code = code, fold=fold, model=model, test_dataloader=val_loader,
-        )
-
-        if debug:
-            test_predict_proba, _           = test_tester.predict_proba()
-            val_predict_proba, val_targets  = val_tester.predict_proba()
-        else:
-            try:
-                test_predict_proba, _           = test_tester.predict_proba()
-                val_predict_proba, val_targets  = val_tester.predict_proba()
-            except Exception as e:
-                _log.error('Unexpected exception! %s', e)
-
-        if find_threshold == False:
-            thresholds = [threshold]
-        else:
-            thresholds = np.linspace(0.1, 0.5, 50)
-
-        best_threshold = optimize_threshold(val_predict_proba, val_targets, thresholds)
-        fold_submissions.append(make_prediction(test_predict_proba, best_threshold))
-        logging.info('='*50)
-
-    final_submissions = voting_ensemble(fold_submissions)
-    submit_df = pd.read_csv(path['root'] + path['sample_submission'])
-    if debug is True: submit_df = submit_df[:100]
-    submit_df['Predicted'] = final_submissions
-    submit_df.to_csv(path['root'] + path['submit'] + code + '.csv', index=False)
+    test_tester = Tester(
+        alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
+        code = code, fold=fold, model=model, test_dataloader=test_loader,
+    )
 
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
-    name = model['model']
+    name = model['backbone']
     name += '_' + optimizer['optimizer'] + '_' + str(optimizer['lr'])
-    name += '_' + criterion['loss'] + '_' + criterion['weight']
+    name += '_' + criterion['loss']
     name += '_' + str(seed)
     name += '_' + str(comment)
-    logging.info('Experiment code: {}'.format(name))
+    print('Experiment code:', name)
     return name
 
 if __name__ == '__main__':

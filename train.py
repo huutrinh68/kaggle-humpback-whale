@@ -71,31 +71,12 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
     optimizer = load_optimizer(model.parameters())
 
     # Data
-    train_siamese_loader, val_siamese_loader = create_siamese_loader(set())
+    train_siamese_loader, val_siamese_loader = create_siamese_loader()
 
     # Loss function
     loss_func = load_loss()
 
-    # Training
-    # iteration_number= 0
-    # loss_history = []
-    # counter = []
-    # for epoch in range(0, max_epochs):
-    #     for i, data in tqdm(enumerate(siamese_loader)):
-    #         img0, img1, label = data
-    #         img0, img1, label = img0.cuda().float(), img1.cuda().float(), label.cuda().float()
-    #         optimizer.zero_grad()
-    #         output1, output2 = model(img0, img1)
-    #         loss_contrastive = loss_func((output1, output2), label)
-    #         loss_contrastive.backward()
-    #         optimizer.step()
-    #         if i % 10 == 0 :
-    #             print("Epoch number {}\n Current loss {}\n".format(epoch,loss_contrastive.item()))
-    #             iteration_number +=10
-    #             counter.append(iteration_number)
-    #             loss_history.append(loss_contrastive.item())
-    # show_plot(counter,loss_history)
-
+    # Trainer
     trainer = Trainer(
         alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
         code = get_dir_name(),
@@ -109,7 +90,9 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
         hooks = {'after_init': after_init,
                  'after_load_checkpoint': after_load_checkpoint,
                  'after_epoch_end': after_epoch_end,
-                 'before_checkpoint_persisted':before_checkpoint_persisted}
+                 'before_checkpoint_persisted':before_checkpoint_persisted,
+                 'before_train_iteration_start':before_train_iteration_start,
+                 'after_backward': after_backward}
     )
 
     if debug:
@@ -122,10 +105,15 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
 
 @ex.capture
 def after_init(trainer, _run):
-    if trainer.resume==True:
-        trained_pairs = torch.load(trainer.standard_model_path('last_trained_pairs'))
-        trainer.train_dataloader.dataset.trained_pairs = trained_pairs
-        trainer.val_dataloader.dataset.trained_pairs   = trained_pairs
+    pass
+
+@ex.capture
+def before_train_iteration_start(trainer, _run):
+    pass
+
+@ex.capture
+def after_backward(trainer, _run):
+    pass
 
 @ex.capture
 def after_epoch_end(trainer, _run):
@@ -137,8 +125,7 @@ def after_load_checkpoint(trainer, _run):
 
 @ex.capture
 def before_checkpoint_persisted(trainer, _run):
-    trained_pairs = trainer.train_dataloader.dataset.trained_pairs
-    torch.save(trained_pairs, trainer.standard_model_path('last_trained_pairs'))
+    pass
 
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):

@@ -149,7 +149,7 @@ class cropDataGenerator():
 # ========================================
 class SiameseDataset(Dataset):
     @data_ingredient.capture
-    def __init__(self, data_reader, mode, trained_pairs,
+    def __init__(self, data_reader, mode,
                  batch_size, same_ratio, path, image_size):
         self.data_reader = data_reader
         self.same_ratio  = same_ratio
@@ -161,7 +161,6 @@ class SiameseDataset(Dataset):
         self.t2i = {}
         for i, t in enumerate(self.train):
             self.t2i[t] = i
-        self.trained_pairs = trained_pairs
 
     def __getitem__(self, index):
         if self.mode=='train':
@@ -175,11 +174,6 @@ class SiameseDataset(Dataset):
                 b = self.get_unmatch(index)
                 c = 1
 
-            # Adding index of a, b into trained_pairs for validation purpose
-            ia = self.t2i[a]
-            ib = self.t2i[b]
-            if ia > ib: tmp=ia; ia=ib; ib=tmp
-            self.trained_pairs.add((ia, ib))
             a = self.data_reader.read_for_training(a)
             b = self.data_reader.read_for_training(b)
 
@@ -192,7 +186,7 @@ class SiameseDataset(Dataset):
                 c = 0
             else:
                 a = self.train[index]
-                b = self.get_unmatch(index, filter=self.trained_pairs)
+                b = self.get_unmatch(index)
                 c = 1
             a = self.data_reader.read_for_validation(a)
             b = self.data_reader.read_for_validation(b)
@@ -225,14 +219,14 @@ class SiameseDataset(Dataset):
 
 
 @data_ingredient.capture
-def create_siamese_loader(trained_pairs, batch_size, n_workers):
+def create_siamese_loader(batch_size, n_workers):
     data_reader     = cropDataGenerator()
     # TRAIN
-    train_siamese_dataset = SiameseDataset(data_reader, 'train', trained_pairs)
+    train_siamese_dataset = SiameseDataset(data_reader, 'train')
     train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=True, pin_memory=True,
                                         num_workers=n_workers, batch_size=batch_size)
     # VALID
-    val_siamese_dataset   = SiameseDataset(data_reader, 'test', trained_pairs)
+    val_siamese_dataset   = SiameseDataset(data_reader, 'test')
     val_siamese_loader    = DataLoader(val_siamese_dataset, shuffle=False, pin_memory=True,
                                         num_workers=n_workers, batch_size=batch_size)
     return train_siamese_loader, val_siamese_loader
@@ -243,9 +237,7 @@ def create_siamese_loader(trained_pairs, batch_size, n_workers):
 
 # @ex.main
 # def main(data, path):
-#     train_loader, test_loader =  create_siamese_loader()
-#     print(len(train_loader.dataset.trained_pairs))
-#     print(len(test_loader.dataset.trained_pairs))
+#     train_loader, test_loader =  create_siamese_loader(set())
 #     data_reader     = cropDataGenerator()
 #     siamese_dataset = SiameseDataset(data_reader, 'train')
 #     visual_dataloader = DataLoader(siamese_dataset,

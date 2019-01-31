@@ -196,7 +196,10 @@ class Trainer(object):
             loader.set_description('[Epoch {:3d}]'.format(self.current_epoch))
             for index, data in enumerate(loader):
                 # Loss
-                batch_loss = self.run_train_iteration(index, data, train_iters, loader)
+                if self.model.name != 'boosting_siamese':
+                    batch_loss = self.run_train_iteration(index, data, train_iters, loader)
+                else:
+                    batch_loss = self.run_boosting_train_iteration(index, data, train_iters, loader)
                 total_train_loss += batch_loss
                 metrics_str = ''
                 for metric in self.metrics:
@@ -276,6 +279,38 @@ class Trainer(object):
         # Optimize
         self.optimizer.zero_grad()
         loss.backward()
+        self.call_hook_func('after_backward')
+        self.optimizer.step()
+        # Log
+        loss = loss.detach()
+        logging.debug('[train {}/{}/{}] loss {}'
+                     .format(self.current_epoch, index, train_iters, loss))
+        if loss < self.lowest_train_loss:
+            self.lowest_train_loss = loss
+
+        self.call_hook_func('after_train_iteration_end')
+        return loss
+
+    def run_boosting_train_iteration(self, index, data, train_iters, loader):
+        self.status = 'train'
+        self.call_hook_func('before_train_iteration_start')
+
+        # Predict
+        *images, targets = data
+        target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
+        scores, weighted_scores = self.forward(images)
+        final_score = weighted_scores[-1]
+
+        # We calculate the grad separately
+        # grads, = torch.autograd.grad(final_score, self.model.)
+
+        loss = self.loss_func(final_score, target)
+        for metric in self.metrics:
+            self.metrics[metric]['train'].update(final_score, target)
+        # Optimize
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.call_hook_func('after_backward')
         self.optimizer.step()
         # Log
         loss = loss.detach()
