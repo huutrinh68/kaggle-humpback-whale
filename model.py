@@ -8,15 +8,17 @@ from cnn_finetune import make_model
 # local import
 from sacred import Ingredient
 from data import data_ingredient
-model_ingredient = Ingredient('model', ingredients=[data_ingredient])
+from criterion import criterion_ingredient, load_loss
 
+model_ingredient = Ingredient('model',
+                              ingredients=[data_ingredient,
+                                           criterion_ingredient])
 
 @model_ingredient.config
 def cfg():
     model    = 'siamese'
     backbone = 'resnet18' # resnet18 / resnet34 / bninception / seres50, default: bninception
     heads    = [32, 64, 128]
-
 
 @model_ingredient.capture
 def load_model(model, backbone, heads):
@@ -84,7 +86,8 @@ class Siamese(nn.Module):
 
 # =====================================
 class BoostingSiamese(nn.Module):
-    def __init__(self, backbone, heads):
+    @model_ingredient.capture
+    def __init__(self, backbone, heads, criterion):
         super().__init__()
         backbone = make_model(
             model_name=backbone,
@@ -96,6 +99,8 @@ class BoostingSiamese(nn.Module):
         self.backbone = backbone
         self.n_dist   = 3
         self.dims     = 512
+        self.loss_func= load_loss()
+        self.calc_weights  = True
 
         self.heads = []
         for i in range(len(heads)):
@@ -154,20 +159,54 @@ class BoostingSiamese(nn.Module):
         score = torch.sigmoid(score)
         return score
 
-    def forward(self, x):
+    def forward(self, x, target):
         dist_features = self.get_distance_features(x)
+
         # Calculating score for each head then ensemble
-        scores = []
-        weighted_scores = []
+        plain_scores     = []
+        ensemble_scores  = []
+        np_scores        = []
+        boosting_weights = []
+
         last_score = 0
-        agg_score = 0
+        final_score = 0
+        # First calculate score
         for i, head in enumerate(self.heads):
-            score = self.get_score(head, dist_features)
-            weighted_score = (1-head['scoring_weight'])*last_score \
-                             +  head['scoring_weight']*score
-            scores.append(score)
-            weighted_scores.append(weighted_score)
-        return scores, weighted_scores
+            # Plain score
+            plain_score = self.get_score(head, dist_features)
+            plain_scores.append(plain_score)
+
+            # Ensemble score
+            ensemble_score = (1-head['scoring_weight'])* last_score \
+                             +  head['scoring_weight'] * plain_score
+
+            # Transform to numpy for boosting purpose
+            np_scores.append(ensemble_score.detach().cpu().numpy())
+
+            # Update last_score
+            last_score = ensemble_score
+
+        # Then we calculate weight from loss gradient
+        target = target.cpu().numpy()
+        boosting_weights.append(torch.ones(plain_score.shape))
+        boosting_weights[0] /= torch.sum(boosting_weights[0])
+        for i in range(1, len(self.heads)):
+            weights = []
+            for k in range(len(np_scores[i])):
+                _output_tensor = torch.from_numpy(np_scores[i][k:k+1])
+                _target_tensor = torch.from_numpy(target[k:k+1])
+                _output_tensor.requires_grad_(True)
+                # Calculate gradient
+                loss = self.loss_func(_output_tensor, _target_tensor)
+                loss.backward()
+                grad = 0 - _output_tensor.grad
+                weights.append(grad)
+            weights = torch.cat(weights, dim=0)
+            weights.requires_grad_(False)
+            weights /= torch.sum(weights)
+            boosting_weights.append(weights)
+
+        return plain_scores, ensemble_score, boosting_weights
 
     def get_features(self, x):
         x = self.backbone(x)

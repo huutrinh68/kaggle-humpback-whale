@@ -15,7 +15,7 @@ def cfg():
         weight_decay = 10e-9     # weight_decay
         momentum = 10e-4         # momentum (for SGD only)
     if optimizer == 'adam':
-        lr = 10e-4
+        lr = 10e-5
         weight_decay = 10e-9
     if optimizer == 'adamw':
         lr = 10e-5
