@@ -43,13 +43,13 @@ class Siamese(nn.Module):
         self.conv1 = nn.Conv2d(1, 32, kernel_size=(1, 4), padding=0, stride=1)
         self.conv2 = nn.Conv2d(1, 1, kernel_size=(32, 1), padding=0, stride=1)
 
-
-    def forward(self, xa, xb):
+    def forward(self, x):
+        xa, xb = x[0], x[1]
         # Get features
         feature_a = self.get_features(xa)
         feature_b = self.get_features(xb)
 
-        return feature_a, feature_b
+        return (feature_a, feature_b)
         # score = self.get_score(feature_a, feature_b)
         # return score, feature_a, feature_b
 

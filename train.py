@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 from optimizer import optimizer_ingredient, load_optimizer
 from criterion import criterion_ingredient, load_loss, f1_macro_aggregator
 from model import model_ingredient, load_model
-from data import data_ingredient, cropDataGenerator, SiameseDataset, create_siamese_loader
+from data import data_ingredient, create_siamese_loader
 from path import path_ingredient, prepair_dir
 
 ex = Experiment('Train', ingredients=[model_ingredient,      # model
@@ -71,64 +71,52 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
     optimizer = load_optimizer(model.parameters())
 
     # Data
-    data_reader     = cropDataGenerator()
-    train_siamese_dataset = SiameseDataset(data_reader, 'train')
-    train_siamese_loader  = create_siamese_loader(siamese_dataset_train)
-    val_siamese_dataset = SiameseDataset(data_reader, 'train')
-    val_siamese_loader  = create_siamese_loader(siamese_dataset_train)
+    train_siamese_loader, val_siamese_loader = create_siamese_loader()
 
     # Loss function
     loss_func = load_loss()
 
     # Training
-    iteration_number= 0
-    loss_history = []
-    counter = []
-    for epoch in range(0, max_epochs):
-        for i, data in tqdm(enumerate(siamese_loader)):
-            img0, img1, label = data
-            img0, img1, label = img0.cuda().float(), img1.cuda().float(), label.cuda().float()
-            optimizer.zero_grad()
-            output1, output2 = model(img0, img1)
-            loss_contrastive = loss_func((output1, output2), label)
-            loss_contrastive.backward()
-            optimizer.step()
-            if i % 10 == 0 :
-                print("Epoch number {}\n Current loss {}\n".format(epoch,loss_contrastive.item()))
-                iteration_number +=10
-                counter.append(iteration_number)
-                loss_history.append(loss_contrastive.item())
-
+    # iteration_number= 0
+    # loss_history = []
+    # counter = []
+    # for epoch in range(0, max_epochs):
+    #     for i, data in tqdm(enumerate(siamese_loader)):
+    #         img0, img1, label = data
+    #         img0, img1, label = img0.cuda().float(), img1.cuda().float(), label.cuda().float()
+    #         optimizer.zero_grad()
+    #         output1, output2 = model(img0, img1)
+    #         loss_contrastive = loss_func((output1, output2), label)
+    #         loss_contrastive.backward()
+    #         optimizer.step()
+    #         if i % 10 == 0 :
+    #             print("Epoch number {}\n Current loss {}\n".format(epoch,loss_contrastive.item()))
+    #             iteration_number +=10
+    #             counter.append(iteration_number)
+    #             loss_history.append(loss_contrastive.item())
     # show_plot(counter,loss_history)
-    # train_loader, val_loader, label_count = create_loader(n_fold = data['n_fold'],
-    #                                                       fold=fold,
-    #                                                       seed=seed,
-    #                                                       debug=debug)
-    # loss_func = load_loss(label_count)
-    # trainer = Trainer(
-    #     alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
-    #     code = get_dir_name(),
-    #     fold=fold,
-    #     model=model,
-    #     optimizer=optimizer,
-    #     train_dataloader=train_loader,
-    #     val_dataloader=val_loader,
-    #     loss_func=loss_func,
-    #     max_epochs=max_epochs,
-    #     resume=resume,
-    #     hooks = {'after_load_checkpoint': after_load_checkpoint,
-    #              'after_epoch_end': after_epoch_end},
-    #     metrics = [('macro_f1', f1_macro_aggregator(threshold, data['n_classes']))]
-    # )
 
-    # if debug:
-    #     trainer.train()
-    # else:
-    #     try:
-    #         trainer.train()
-    #     except Exception as e:
-    #         _log.error('Unexpected exception! %s', e)
+    trainer = Trainer(
+        alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
+        code = get_dir_name(),
+        model=model,
+        optimizer=optimizer,
+        train_dataloader=train_siamese_loader,
+        val_dataloader=val_siamese_loader,
+        loss_func=loss_func,
+        max_epochs=max_epochs,
+        resume=resume,
+        hooks = {'after_load_checkpoint': after_load_checkpoint,
+                 'after_epoch_end': after_epoch_end},
+    )
 
+    if debug:
+        trainer.train()
+    else:
+        try:
+            trainer.train()
+        except Exception as e:
+            _log.error('Unexpected exception! %s', e)
 
 @ex.capture
 def after_epoch_end(trainer, _run):
@@ -144,7 +132,7 @@ def after_load_checkpoint(trainer, _run):
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
     name = model['backbone']
     name += '_' + optimizer['optimizer'] + '_' + str(optimizer['lr'])
-    name += '_' + criterion['loss'] + '_' + criterion['weight']
+    name += '_' + criterion['loss']
     name += '_' + str(seed)
     name += '_' + str(comment)
     print('Experiment code:', name)

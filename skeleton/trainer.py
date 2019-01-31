@@ -255,7 +255,11 @@ class Trainer(object):
             self.call_hook_func('after_epoch_end')
 
     def forward(self, images):
-        images = images.cuda(non_blocking=True)
+        if type(images) is list:
+            images = [image.cuda(non_blocking=True)
+                      for image in images]
+        else:
+            images = images.cuda(non_blocking=True)
         output = self.model(images)
         return output
 
@@ -263,7 +267,7 @@ class Trainer(object):
         self.status = 'train'
         self.call_hook_func('before_train_iteration_start')
         # Predict
-        images, targets = data
+        *images, targets = data
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
         output = self.forward(images)
         loss = self.loss_func(output, target)
@@ -287,7 +291,7 @@ class Trainer(object):
         self.status = 'val'
         self.call_hook_func('before_val_iteration_start')
         # Predict
-        images, targets = data
+        *images, targets = data
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
         output = self.forward(images)
         loss = self.loss_func(output, target)
