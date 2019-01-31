@@ -104,6 +104,19 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
             _log.error('Unexpected exception! %s', e)
 
 @ex.capture
+def after_epoch_end(trainer, _run):
+    for metric in trainer.metrics:
+        _run.log_scalar('{}_train_{}'.format(trainer.fold, metric), trainer.cache[metric]['train'][-1])
+        _run.log_scalar('{}_val_{}'.format(trainer.fold, metric), trainer.cache[metric]['val'][-1])
+
+@ex.capture
+def after_load_checkpoint(trainer, _run):
+    for metric in trainer.cache:
+        for tmp in ['train', 'val']:
+            for value in trainer.cache[metric][tmp]:
+                _run.log_scalar('{}_{}_{}'.format(trainer.fold, tmp, metric), value)
+
+@ex.capture
 def after_init(trainer, _run):
     pass
 
@@ -113,14 +126,6 @@ def before_train_iteration_start(trainer, _run):
 
 @ex.capture
 def after_backward(trainer, _run):
-    pass
-
-@ex.capture
-def after_epoch_end(trainer, _run):
-    pass
-
-@ex.capture
-def after_load_checkpoint(trainer, _run):
     pass
 
 @ex.capture
