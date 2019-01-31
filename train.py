@@ -25,9 +25,9 @@ ex = Experiment('Train', ingredients=[model_ingredient,      # model
                                       path_ingredient,       # path
                                       criterion_ingredient]) # criterion
 
-# ex.observers.append(MongoObserver.create(db_name='humpback_whale'))
-# ex.observers.append(FileStorageObserver.create('exp_logs/experiments'))
-# ex.captured_out_filter = apply_backspaces_and_linefeeds
+ex.observers.append(MongoObserver.create(db_name='humpback_whale'))
+ex.observers.append(FileStorageObserver.create('exp_logs/experiments'))
+ex.captured_out_filter = apply_backspaces_and_linefeeds
 
 @ex.config
 def cfg():

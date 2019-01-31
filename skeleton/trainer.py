@@ -196,7 +196,7 @@ class Trainer(object):
             loader.set_description('[Epoch {:3d}]'.format(self.current_epoch))
             for index, data in enumerate(loader):
                 # Loss
-                if self.model.name != 'boosting_siamese':
+                if 'boosting' not in self.code:
                     batch_loss = self.run_train_iteration(index, data, train_iters)
                 else:
                     batch_loss = self.run_boosting_train_iteration(index, data, train_iters)
@@ -226,7 +226,7 @@ class Trainer(object):
                         with torch.set_grad_enabled(False):
                             self.model.eval()
                             for index, data in enumerate(self.val_dataloader):
-                                if self.model.name != 'boosting_siamese':
+                                if 'boosting' not in self.code:
                                     total_val_loss += self.run_val_iteration(index, data, val_iters)
                                 else:
                                     total_val_loss += self.run_boosting_val_iteration(index, data, val_iters)
@@ -335,7 +335,7 @@ class Trainer(object):
         images = self.to_cuda(images)
 
         # Forward
-        plain_scores, ensemble_score, boosting_weights = self.model.forward(images, target)
+        plain_scores, ensemble_score, boosting_weights = self.model.forward((images, target))
         train_loss = self.loss_func(plain_scores, target, boosting_weights)
         loss = self.loss_func(ensemble_score, target)
         for metric in self.metrics:
@@ -368,7 +368,7 @@ class Trainer(object):
         images = self.to_cuda(images)
 
         # Forward
-        plain_scores, ensemble_score, boosting_weights = self.model.forward(images, target)
+        plain_scores, ensemble_score, boosting_weights = self.model.forward((images, target))
         loss = self.loss_func(ensemble_score, target)
         for metric in self.metrics:
             self.metrics[metric]['val'].update(ensemble_score, target)

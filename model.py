@@ -159,7 +159,8 @@ class BoostingSiamese(nn.Module):
         score = torch.sigmoid(score)
         return score
 
-    def forward(self, x, target):
+    def forward(self, x):
+        x, target = x
         dist_features = self.get_distance_features(x)
 
         # Calculating score for each head then ensemble
