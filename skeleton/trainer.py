@@ -218,14 +218,6 @@ class Trainer(object):
                         with torch.set_grad_enabled(False):
                             self.model.eval()
                             for index, data in enumerate(self.val_dataloader):
-                                total_val_loss += self.run_val_iteration(index, data, val_iters)
-                        val_loss = total_val_loss / val_iters
-
-                    if self.val_dataloader is not None:
-                        val_iters = len(self.val_dataloader)
-                        with torch.set_grad_enabled(False):
-                            self.model.eval()
-                            for index, data in enumerate(self.val_dataloader):
                                 if 'boosting' not in self.code:
                                     total_val_loss += self.run_val_iteration(index, data, val_iters)
                                 else:
@@ -335,7 +327,7 @@ class Trainer(object):
         images = self.to_cuda(images)
 
         # Forward
-        plain_scores, ensemble_score, boosting_weights = self.model.forward((images, target))
+        plain_scores, ensemble_score, boosting_weights = self.model.forward(images, target)
         train_loss = self.loss_func(plain_scores, target, boosting_weights)
         loss = self.loss_func(ensemble_score, target)
         for metric in self.metrics:
@@ -368,7 +360,7 @@ class Trainer(object):
         images = self.to_cuda(images)
 
         # Forward
-        plain_scores, ensemble_score, boosting_weights = self.model.forward((images, target))
+        plain_scores, ensemble_score, boosting_weights = self.model.forward(images, target, calc_weight=False)
         loss = self.loss_func(ensemble_score, target)
         for metric in self.metrics:
             self.metrics[metric]['val'].update(ensemble_score, target)

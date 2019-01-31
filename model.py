@@ -159,8 +159,7 @@ class BoostingSiamese(nn.Module):
         score = torch.sigmoid(score)
         return score
 
-    def forward(self, x):
-        x, target = x
+    def forward(self, x, target, calc_weight=True):
         dist_features = self.get_distance_features(x)
 
         # Calculating score for each head then ensemble
@@ -187,25 +186,28 @@ class BoostingSiamese(nn.Module):
             # Update last_score
             last_score = ensemble_score
 
-        # Then we calculate weight from loss gradient
-        target = target.cpu().numpy()
-        boosting_weights.append(torch.ones(plain_score.shape))
-        boosting_weights[0] /= torch.sum(boosting_weights[0])
-        for i in range(1, len(self.heads)):
-            weights = []
-            for k in range(len(np_scores[i])):
-                _output_tensor = torch.from_numpy(np_scores[i][k:k+1])
-                _target_tensor = torch.from_numpy(target[k:k+1])
-                _output_tensor.requires_grad_(True)
-                # Calculate gradient
-                loss = self.loss_func(_output_tensor, _target_tensor)
-                loss.backward()
-                grad = 0 - _output_tensor.grad
-                weights.append(grad)
-            weights = torch.cat(weights, dim=0)
-            weights.requires_grad_(False)
-            weights /= torch.sum(weights)
-            boosting_weights.append(weights)
+        if calc_weight == True:
+            # Then we calculate weight from loss gradient
+            target = target.cpu().numpy()
+            boosting_weights.append(torch.ones(plain_score.shape))
+            boosting_weights[0] /= torch.sum(boosting_weights[0])
+            for i in range(1, len(self.heads)):
+                weights = []
+                for k in range(len(np_scores[i])):
+                    _output_tensor = torch.from_numpy(np_scores[i][k:k+1])
+                    _target_tensor = torch.from_numpy(target[k:k+1])
+                    _output_tensor.requires_grad_(True)
+                    # Calculate gradient
+                    loss = self.loss_func(_output_tensor, _target_tensor)
+                    loss.backward()
+                    grad = 0 - _output_tensor.grad
+                    weights.append(grad)
+                weights = torch.cat(weights, dim=0)
+                weights.requires_grad_(False)
+                weights /= torch.sum(weights)
+                boosting_weights.append(weights)
+        else:
+            boosting_weights = None
 
         return plain_scores, ensemble_score, boosting_weights
 
