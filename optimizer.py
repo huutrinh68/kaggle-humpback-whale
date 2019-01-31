@@ -40,7 +40,6 @@ def load_optimizer(params, optimizer):
     else:_optimizer = load_sgd(params)
     return _optimizer
 
-
 # ================================
 # additional optimizer source code
 class AdamW(Optimizer):

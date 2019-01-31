@@ -32,7 +32,8 @@ def contrastiveLoss(output, target, margin=10e-8, mul=10e3):
     return loss
 
 # ==========================
-def binomialDevianceLoss(output, target, weights=None, beta1=1, beta2=10e-3, mul=10e1, keep_shape=False):
+def binomialDevianceLoss(output, target, weights=None, beta1=1, beta2=10e-3,
+                         mul=1, keep_shape=False):
     # loss of
     # Positive sample (different class, target = 1) will be weighted by 25
     # Positive sample (same class,      target = 0) will be weighted by 1
@@ -46,7 +47,7 @@ def binomialDevianceLoss(output, target, weights=None, beta1=1, beta2=10e-3, mul
         for _output, weight in zip(output, weights):
             _weight = weight.cuda(non_blocking=True)
             loss += torch.log(1 + torch.exp((2*target - 1) * (_output - beta2) \
-                                            * beta1 * balancer * _weight)) * mul
+                                            * beta1 * balancer )) * mul * _weight
         loss /= len(weights)
         return torch.mean(loss)
 

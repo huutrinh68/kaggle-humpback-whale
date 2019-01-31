@@ -196,10 +196,7 @@ class Trainer(object):
             loader.set_description('[Epoch {:3d}]'.format(self.current_epoch))
             for index, data in enumerate(loader):
                 # Loss
-                if 'boosting' not in self.code:
-                    batch_loss = self.run_train_iteration(index, data, train_iters)
-                else:
-                    batch_loss = self.run_boosting_train_iteration(index, data, train_iters)
+                batch_loss = self.run_train_iteration(index, data, train_iters)
                 total_train_loss += batch_loss
                 metrics_str = ''
                 for metric in self.metrics:
@@ -218,10 +215,7 @@ class Trainer(object):
                         with torch.set_grad_enabled(False):
                             self.model.eval()
                             for index, data in enumerate(self.val_dataloader):
-                                if 'boosting' not in self.code:
-                                    total_val_loss += self.run_val_iteration(index, data, val_iters)
-                                else:
-                                    total_val_loss += self.run_boosting_val_iteration(index, data, val_iters)
+                                total_val_loss += self.run_val_iteration(index, data, val_iters)
                         val_loss = total_val_loss / val_iters
 
                     metrics_str = ''
@@ -273,22 +267,71 @@ class Trainer(object):
         output = self.model(images)
         return output
 
+    # Normal
+    def forward_normal(self, input, target):
+        images = input
+        images = self.to_cuda(input)
+        score  = self.model(images)
+        loss = self.loss_func(score, target)
+        if self.status == 'train':
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+        return score, loss
+
+    # Multihead
+    def forward_multihead(self, input, target):
+        target = target.view(target.shape[0], 1)
+        images = self.to_cuda(input)
+        if self.status == 'train':
+            score, plain_scores, boosting_weights = self.model.forward(images, target)
+            train_loss = self.loss_func(plain_scores, target, boosting_weights)
+        else:
+            score, _, _ = self.model.forward(images, target, calc_weight=False)
+        loss = self.loss_func(score, target)
+        if self.status == 'train':
+            self.optimizer.zero_grad()
+            train_loss.backward()
+            self.optimizer.step()
+        return score, loss
+
+    # Boosting
+    def forward_boosting(self, input, target):
+        target = target.view(target.shape[0], 1)
+        images = self.to_cuda(input)
+        if self.status == 'train':
+            score, plain_scores, boosting_weights, aux_losses = self.model.forward(images, target)
+            train_loss = self.loss_func(plain_scores, target, boosting_weights)
+            # aux_losses[0]: activation  loss
+            # aux_losses[1]: row-l2-norm loss
+            train_loss = train_loss + 0.005 * aux_losses[0] + 0.05 * aux_losses[1]
+        else:
+            score, _, _, _ = self.model.forward(images, target, calc_weight=False)
+        loss = self.loss_func(score, target)
+        if self.status == 'train':
+            self.optimizer.zero_grad()
+            train_loss.backward()
+            self.optimizer.step()
+        return score, loss
+
     def run_train_iteration(self, index, data, train_iters):
         self.status = 'train'
         self.call_hook_func('before_train_iteration_start')
+
         # Predict
-        *images, targets = data
+        *inputs, targets = data
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
-        output = self.forward(images)
-        loss = self.loss_func(output, target)
+
+        if 'multihead_siamese' in self.code:
+            output, loss = self.forward_multihead(inputs, target)
+        elif 'boosting_siamese' in self.code:
+            output, loss = self.forward_boosting(inputs, target)
+        else:
+            output, loss = self.forward_normal(inputs, target)
+
+        # Log
         for metric in self.metrics:
             self.metrics[metric]['train'].update(output, target)
-        # Optimize
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.call_hook_func('after_backward')
-        self.optimizer.step()
-        # Log
         loss = loss.detach()
         logging.debug('[train {}/{}/{}] loss {}'
                      .format(self.current_epoch, index, train_iters, loss))
@@ -302,70 +345,19 @@ class Trainer(object):
         self.status = 'val'
         self.call_hook_func('before_val_iteration_start')
         # Predict
-        *images, targets = data
+        *inputs, targets = data
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
-        output = self.forward(images)
-        loss = self.loss_func(output, target)
+
+        if 'multihead' in self.code:
+            output, loss = self.forward_multihead(inputs, target)
+        elif 'boosting' in self.code:
+            pass
+        else:
+            output, loss = self.forward_normal(inputs, target)
+
+        # Log
         for metric in self.metrics:
             self.metrics[metric]['val'].update(output, target)
-        # Log
-        loss = loss.detach()
-        logging.debug('[val {}/{}/{}] loss {}'.format(
-            self.current_epoch, index, val_iters, loss))
-
-        self.call_hook_func('after_val_iteration_end')
-        return loss
-
-    def run_boosting_train_iteration(self, index, data, train_iters):
-        self.status = 'train'
-        self.call_hook_func('before_train_iteration_start')
-
-        # Load data
-        *images, targets = data
-        target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
-        target = target.view(target.shape[0], 1)
-        images = self.to_cuda(images)
-
-        # Forward
-        plain_scores, ensemble_score, boosting_weights = self.model.forward(images, target)
-        train_loss = self.loss_func(plain_scores, target, boosting_weights)
-        loss = self.loss_func(ensemble_score, target)
-        for metric in self.metrics:
-            self.metrics[metric]['train'].update(ensemble_score, target)
-
-        # Optimize
-        self.optimizer.zero_grad()
-        train_loss.backward()
-        self.call_hook_func('after_backward')
-        self.optimizer.step()
-
-        # Log
-        loss = loss.detach()
-        logging.debug('[train {}/{}/{}] loss {}'
-                     .format(self.current_epoch, index, train_iters, loss))
-        if loss < self.lowest_train_loss:
-            self.lowest_train_loss = loss
-
-        self.call_hook_func('after_train_iteration_end')
-        return loss
-
-    def run_boosting_val_iteration(self, index, data, val_iters):
-        self.status = 'val'
-        self.call_hook_func('before_val_iteration_start')
-
-        # Predict
-        *images, targets = data
-        target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
-        target = target.view(target.shape[0], 1)
-        images = self.to_cuda(images)
-
-        # Forward
-        plain_scores, ensemble_score, boosting_weights = self.model.forward(images, target, calc_weight=False)
-        loss = self.loss_func(ensemble_score, target)
-        for metric in self.metrics:
-            self.metrics[metric]['val'].update(ensemble_score, target)
-
-        # Log
         loss = loss.detach()
         logging.debug('[val {}/{}/{}] loss {}'.format(
             self.current_epoch, index, val_iters, loss))

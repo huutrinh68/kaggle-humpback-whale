@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from cnn_finetune import make_model
 
@@ -19,11 +20,15 @@ def cfg():
     model    = 'siamese'
     backbone = 'resnet18' # resnet18 / resnet34 / bninception / seres50, default: bninception
     heads    = [32, 64, 128]
+    if model == 'boosting_siamese':
+        heads    = [50, 100, 150, 200]
 
 @model_ingredient.capture
 def load_model(model, backbone, heads):
     if model == 'siamese':
         return Siamese(backbone)
+    elif model == 'multihead_siamese':
+        return MultiheadSiamese(backbone, heads)
     elif model == 'boosting_siamese':
         return BoostingSiamese(backbone, heads)
     else:
@@ -38,7 +43,7 @@ class Siamese(nn.Module):
             pretrained=True,
             num_classes=1
         )._features
-        backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        # backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.name     = 'siamese'
         self.backbone = backbone
         self.feature_dims = 512
@@ -85,7 +90,7 @@ class Siamese(nn.Module):
         return x.reshape(*x.shape[:2], -1).max(-1)[0]
 
 # =====================================
-class BoostingSiamese(nn.Module):
+class MultiheadSiamese(nn.Module):
     @model_ingredient.capture
     def __init__(self, backbone, heads, criterion):
         super().__init__()
@@ -209,9 +214,146 @@ class BoostingSiamese(nn.Module):
         else:
             boosting_weights = None
 
-        return plain_scores, ensemble_score, boosting_weights
+        return ensemble_score, plain_scores, boosting_weights
 
     def get_features(self, x):
         x = self.backbone(x)
         x = x.reshape(*x.shape[:2], -1).max(-1)[0]
         return x
+
+# =====================================
+class BoostingSiamese(nn.Module):
+    @model_ingredient.capture
+    def __init__(self, backbone, heads, criterion):
+        super().__init__()
+        backbone = make_model(
+            model_name=backbone,
+            pretrained=True,
+            num_classes=1
+        )._features
+        backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.name     = 'boosting_siamese'
+        self.backbone = backbone
+        self.n_dist   = 3
+        self.dims     = 512
+        self.loss_func= load_loss()
+        self.calc_weights  = True
+
+        self.heads = []
+        for i in range(len(heads)):
+            self.heads.append(dict())
+
+            # Saving head info to dict
+            self.heads[i]['n_hidden']  = heads[i]
+
+            # Create sub-module based on the info
+            self.heads[i]['hidden']  = nn.Sequential(
+                nn.Linear(self.dims, heads[i]),
+                nn.ReLU(),
+            )
+
+            # Adding module to main model
+            self.add_module('head_{}'.format(i), self.heads[i]['hidden'])
+
+        # Calculating the scoring weight for each head
+        for i in range(len(heads)):
+            tmp = 2.0 / (1 + len(heads))
+            self.heads[i]['head_weight'] = tmp
+            self.heads[i]['scoring_weight'] = 0
+            for k in range(i):
+                self.heads[i]['scoring_weight'] = tmp * self.heads[k]['head_weight']
+
+    def get_features(self, head, x):
+        x = self.backbone(x)
+        x = x.reshape(*x.shape[:2], -1).max(-1)[0]
+        x = head['hidden'](x)
+        return x
+
+    def get_activation(self, head, pair_input):
+        x = self.get_features(head, pair_input[0])
+        y = self.get_features(head, pair_input[1])
+        return x, y
+
+    def get_score(self, head, pair_input):
+        # Make head features
+        x, y = self.get_activation(head, pair_input)
+        score = nn.CosineSimilarity()(x, y)
+        return score, (x, y)
+
+    def forward(self, pair_input, target, calc_weight=True):
+        # Calculating score for each head then ensemble
+        plain_scores     = []
+        ensemble_scores  = []
+        np_scores        = []
+        boosting_weights = []
+        activations      = []
+
+        last_score = 0
+        final_score = 0
+        # First calculate score
+        for i, head in enumerate(self.heads):
+            # Plain score
+            plain_score, activation = self.get_score(head, pair_input)
+            plain_scores.append(plain_score)
+            activations.append(activation)
+
+            # Ensemble score
+            ensemble_score = (1-head['scoring_weight'])* last_score \
+                             +  head['scoring_weight'] * plain_score
+
+            # Transform to numpy for boosting purpose
+            np_scores.append(ensemble_score.detach().cpu().numpy())
+
+            # Update last_score
+            last_score = ensemble_score
+
+        if calc_weight == True:
+            # Then we calculate weight from loss gradient
+            target = target.cpu().numpy()
+            boosting_weights.append(torch.ones(plain_score.shape))
+            boosting_weights[0] /= torch.sum(boosting_weights[0])
+            for i in range(1, len(self.heads)):
+                weights = []
+                for k in range(len(np_scores[i])):
+                    _output_tensor = torch.from_numpy(np_scores[i][k:k+1])
+                    _target_tensor = torch.from_numpy(target[k:k+1])
+                    _output_tensor.requires_grad_(True)
+                    # Calculate gradient
+                    loss = self.loss_func(_output_tensor, _target_tensor)
+                    loss.backward()
+                    grad = 0 - _output_tensor.grad
+                    weights.append(grad)
+                weights = torch.cat(weights, dim=0)
+                weights.requires_grad_(False)
+                weights /= torch.sum(weights)
+                boosting_weights.append(weights)
+
+            activation_loss = 0
+            for i in range(len(activations)):
+                for k in range(i):
+                    if i == k: continue
+                    xi = torch.pow(activations[i][0],2)
+                    yi = torch.pow(activations[i][1],2)
+                    xk = torch.pow(activations[k][0],2)
+                    yk = torch.pow(activations[k][1],2)
+
+                    xk = xk.view(xk.shape[1], xk.shape[0])
+                    yk = yk.view(yk.shape[1], yk.shape[0])
+
+                    activation_loss += torch.sum(torch.mm(xk, xi))
+                    activation_loss += torch.sum(torch.mm(yk, yi))
+
+                    activation_loss /= xi.shape[0]
+
+            weight_loss = 0
+            for n, p in self.named_parameters():
+                if 'head' in n and 'weight' in n:
+                    weight_loss += torch.pow(torch.sum(torch.norm(p, dim=1) - 1), 2)
+            n_row = 0
+            for head in self.heads: n_row += head['n_hidden']
+            weight_loss /= n_row
+
+        else:
+            boosting_weights = None
+
+        return ensemble_score, plain_scores, boosting_weights, (activation_loss, weight_loss)
