@@ -43,7 +43,7 @@ class Siamese(nn.Module):
             pretrained=True,
             num_classes=1
         )._features
-        # backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.name     = 'siamese'
         self.backbone = backbone
         self.feature_dims = 512
