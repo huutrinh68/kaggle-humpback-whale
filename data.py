@@ -225,10 +225,9 @@ class SiameseDataset(Dataset):
 
 
 @data_ingredient.capture
-def create_siamese_loader(batch_size, n_workers):
+def create_siamese_loader(trained_pairs, batch_size, n_workers):
     data_reader     = cropDataGenerator()
     # TRAIN
-    trained_pairs = set()
     train_siamese_dataset = SiameseDataset(data_reader, 'train', trained_pairs)
     train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=True, pin_memory=True,
                                         num_workers=n_workers, batch_size=batch_size)
@@ -239,33 +238,32 @@ def create_siamese_loader(batch_size, n_workers):
     return train_siamese_loader, val_siamese_loader
 
 # ============ TEST ===========
-ex = Experiment('tmp', ingredients=[data_ingredient,
-                                    meta_ingredient])
+# ex = Experiment('tmp', ingredients=[data_ingredient,
+#                                     meta_ingredient])
 
-@ex.main
-def main(data, path):
-    train_loader, test_loader =  create_siamese_loader()
-    print(len(train_loader.dataset.trained_pairs))
-    print(len(test_loader.dataset.trained_pairs))
+# @ex.main
+# def main(data, path):
+#     train_loader, test_loader =  create_siamese_loader()
+#     print(len(train_loader.dataset.trained_pairs))
+#     print(len(test_loader.dataset.trained_pairs))
+#     data_reader     = cropDataGenerator()
+#     siamese_dataset = SiameseDataset(data_reader, 'train')
+#     visual_dataloader = DataLoader(siamese_dataset,
+#                                    shuffle=True,
+#                                    num_workers=4,
+#                                    batch_size=16)
+#     image_size = data['image_size']
+#     data_iter = iter(visual_dataloader)
+#     example_batch = next(data_iter)
+#     for i in range(8):
+#         a = example_batch[0][i,:,:]
+#         b = example_batch[1][i,:,:]
+#         a = a.reshape((image_size, image_size))
+#         b = b.reshape((image_size, image_size))
+#         print(example_batch[2][i])
+#         imshow(a)
+#         imshow(b)
 
-    # data_reader     = cropDataGenerator()
-    # siamese_dataset = SiameseDataset(data_reader, 'train')
-    # visual_dataloader = DataLoader(siamese_dataset,
-    #                                shuffle=True,
-    #                                num_workers=4,
-    #                                batch_size=16)
-    # image_size = data['image_size']
-    # data_iter = iter(visual_dataloader)
-    # example_batch = next(data_iter)
-    # for i in range(8):
-    #     a = example_batch[0][i,:,:]
-    #     b = example_batch[1][i,:,:]
-    #     a = a.reshape((image_size, image_size))
-    #     b = b.reshape((image_size, image_size))
-    #     print(example_batch[2][i])
-    #     imshow(a)
-    #     imshow(b)
-
-if __name__ == '__main__':
-    ex.run_commandline()
+# if __name__ == '__main__':
+#     ex.run_commandline()
 

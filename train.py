@@ -71,7 +71,7 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
     optimizer = load_optimizer(model.parameters())
 
     # Data
-    train_siamese_loader, val_siamese_loader = create_siamese_loader()
+    train_siamese_loader, val_siamese_loader = create_siamese_loader(set())
 
     # Loss function
     loss_func = load_loss()
@@ -106,8 +106,10 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
         loss_func=loss_func,
         max_epochs=max_epochs,
         resume=resume,
-        hooks = {'after_load_checkpoint': after_load_checkpoint,
-                 'after_epoch_end': after_epoch_end},
+        hooks = {'after_init': after_init,
+                 'after_load_checkpoint': after_load_checkpoint,
+                 'after_epoch_end': after_epoch_end,
+                 'before_checkpoint_persisted':before_checkpoint_persisted}
     )
 
     if debug:
@@ -119,14 +121,24 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
             _log.error('Unexpected exception! %s', e)
 
 @ex.capture
+def after_init(trainer, _run):
+    if trainer.resume==True:
+        trained_pairs = torch.load(trainer.standard_model_path('last_trained_pairs'))
+        trainer.train_dataloader.dataset.trained_pairs = trained_pairs
+        trainer.val_dataloader.dataset.trained_pairs   = trained_pairs
+
+@ex.capture
 def after_epoch_end(trainer, _run):
     pass
-
 
 @ex.capture
 def after_load_checkpoint(trainer, _run):
     pass
 
+@ex.capture
+def before_checkpoint_persisted(trainer, _run):
+    trained_pairs = trainer.train_dataloader.dataset.trained_pairs
+    torch.save(trained_pairs, trainer.standard_model_path('last_trained_pairs'))
 
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
