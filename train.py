@@ -129,7 +129,7 @@ def before_checkpoint_persisted(trainer, _run):
 
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
-    name = model['backbone']
+    name = model['model'] + '_' + model['backbone']
     name += '_' + optimizer['optimizer'] + '_' + str(optimizer['lr'])
     name += '_' + criterion['loss']
     name += '_' + str(seed)
