@@ -210,7 +210,6 @@ class SiameseDataset(Dataset):
     @data_ingredient.capture
     def __len__(self, valid_num):
         if self.mode == 'train':
-            return 100
             return len(list(self.train))
         else:
             return valid_num
