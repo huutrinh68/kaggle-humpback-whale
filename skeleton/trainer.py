@@ -351,7 +351,7 @@ class Trainer(object):
         if 'multihead' in self.code:
             output, loss = self.forward_multihead(inputs, target)
         elif 'boosting' in self.code:
-            pass
+            output, loss = self.forward_boosting(inputs, target)
         else:
             output, loss = self.forward_normal(inputs, target)
 

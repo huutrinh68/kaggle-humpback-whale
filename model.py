@@ -355,5 +355,7 @@ class BoostingSiamese(nn.Module):
 
         else:
             boosting_weights = None
+            activation_loss  = None
+            weight_loss      = None
 
         return ensemble_score, plain_scores, boosting_weights, (activation_loss, weight_loss)
