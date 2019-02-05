@@ -277,18 +277,19 @@ def create_t2w(w2ts, path):
         save_pickle(t2w, t2w_path)
     return t2w
 
-# @ex.automain
-# def main(path):
-#     TRAIN_DF = path['root'] + path['train_csv']
-#     SUB_DF   = path['root'] + path['sample_submission']
-#     tagged = dict([(p, w) for _, p, w in pd.read_csv(TRAIN_DF).to_records()])
-#     submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
-#     join = list(tagged.keys()) + submit
+@ex.automain
+def main(path):
+    TRAIN_DF = path['root'] + path['train_csv']
+    SUB_DF   = path['root'] + path['sample_submission']
+    tagged = dict([(p, w) for _, p, w in pd.read_csv(TRAIN_DF).to_records()])
+    submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
+    join = list(tagged.keys()) + submit
 
-#     p2size = create_p2size(join)
-#     p2h    = create_p2h(join)
-#     h2ps   = create_h2ps(p2h)
-#     h2p    = create_h2p(h2ps, p2size)
-#     h2ws   = create_h2ws(p2h, tagged)
-#     w2hs   = create_w2hs(h2ws)
-#     w2ts   = create_w2ts(w2hs)
+    p2size = create_p2size(join)
+    p2h    = create_p2h(join)
+    h2ps   = create_h2ps(p2h)
+    h2p    = create_h2p(h2ps, p2size)
+    h2ws   = create_h2ws(p2h, tagged)
+    w2hs   = create_w2hs(h2ws)
+    w2ts, train   = create_w2ts(w2hs)
+    t2w    = create_t2w(w2ts)
