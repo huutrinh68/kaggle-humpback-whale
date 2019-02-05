@@ -4,7 +4,7 @@ path_ingredient = Ingredient('path')
 
 @path_ingredient.config
 def cfg():
-    root              = '/home/dizzyvn/workspace/kaggle/humpback-whale-identification/'
+    root              = '/home/tran/workspace/kaggle/humpback-whale-identification/'
     exp_logs          = 'exp_logs/'
     submit            = 'submit/'
     train_data        = 'input/train/'
