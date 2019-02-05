@@ -52,7 +52,8 @@ def reload():
               'not found! Use current config.')
     else:
         for tmp0, tmp1 in get_config_dict(exp_id).items():
-            locals()[tmp0] = tmp1
+            if tmp0 != 'threshold':
+                locals()[tmp0] = tmp1
 
 def get_config_dict(exp_id):
     config_path = 'exp_logs/experiments/{}/config.json'.format(exp_id)
@@ -123,9 +124,9 @@ def prepare_submit(scores, train_dataset, test_dataset,
         for i, p in enumerate(tqdm(test_dataset.data)):
             d = dict()
             a = scores[i, :]
-            for j in list(reversed(np.argsort(a))):
-                p = train_dataset.data[j]
-                w = train_dataset.t2w[p]
+            for j in list(np.argsort(a)):
+                t = train_dataset.data[j]
+                w = train_dataset.t2w[t]
                 if w not in d: d[w]  = 1
                 else:          d[w] += 1
                 if len(d) == 5:

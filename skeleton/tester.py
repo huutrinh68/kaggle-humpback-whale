@@ -76,6 +76,7 @@ class Tester(object):
 
         if checkpoint_path is not None:
             logging.info(f"Start to load checkpoint")
+            print(checkpoint_path)
             checkpoint = torch.load(checkpoint_path)
             try:
                 self.model.load_state_dict(checkpoint['state_dict'], strict=True)
