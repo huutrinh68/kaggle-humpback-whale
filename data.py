@@ -82,12 +82,13 @@ class ImageDataset(Dataset):
         self.mode        = mode
 
         if self.mode == 'train':
+            self.p2h             = create_p2h(None)
+            self.h2p             = create_h2p(None, None)
             self.t2w             = create_t2w(None)
             self.w2ts, self.data = create_w2ts(None)
         else:
             SUB_DF   = path['root'] + path['sample_submission']
-            submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
-            self.data = self.submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
+            self.data = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
 
     def __getitem__(self, index):
         tmp = self.data[index]
@@ -133,16 +134,17 @@ class SiameseDataset(Dataset):
             self.t2i[t] = i
 
     def __getitem__(self, index):
+        index = index % len(self.train)
         if self.mode=='train':
             should_choose_same = random.uniform(0, 1)
             if should_choose_same < self.same_ratio:
                 a = self.train[index]
                 b = self.get_match(index)
-                c = 0
+                c = 1
             else:
                 a = self.train[index]
                 b = self.get_unmatch(index)
-                c = 1
+                c = 0
 
             a = self.data_reader.read_for_training(a)
             b = self.data_reader.read_for_training(b)
@@ -176,6 +178,9 @@ class SiameseDataset(Dataset):
             t = random.choice(self.train)
             if whale != self.t2w[t] and t not in filter:
                 return t
+
+    def set_seed(self, seed):
+        random.seed(seed)
 
     @data_ingredient.capture
     def __len__(self, valid_num):
