@@ -41,14 +41,37 @@ def cfg():
     upsampling = True
     same_ratio = 0.5
     valid_num  = 1000
+    test_batch_size = 100
     # aug_train  = ['noop', 'rot90', 'rot180', 'rot270', 'shear',
     #               'flipud', 'fliplr']                             # train aug actions
     # aug_train  = ['noop', 'fliplr', 'shear']
     # aug_tta    = ['noop', 'flipud', 'fliplr', 'rot90', 'rot-90']  # tta aug actions;
 
-# ============== featureDataset ==========
+# ============== FeatureDataset ==========
 # ========================================
 class FeatureDataset(Dataset):
+    def __init__(self, tensor):
+        self.tensor = tensor
+
+    def __getitem__(self, index):
+        return self.tensor[index]
+
+    def __len__(self):
+        return self.tensor.size(0)
+
+@data_ingredient.capture
+def create_feature_loader(train_features, test_features, n_workers, test_batch_size):
+    train_feature_dataset = FeatureDataset(train_features)
+    test_feature_dataset  = FeatureDataset(test_features)
+    train_feature_loader  = DataLoader(train_feature_dataset, shuffle=False, pin_memory=True,
+                                       num_workers=n_workers, batch_size=test_batch_size)
+    test_feature_loader   = DataLoader(test_feature_dataset,  shuffle=False, pin_memory=True,
+                                       num_workers=n_workers, batch_size=test_batch_size)
+    return train_feature_loader, test_feature_loader
+
+# ============== ImageDataset ==========
+# ========================================
+class ImageDataset(Dataset):
     @data_ingredient.capture
     def __init__(self, data_reader, mode,
                  batch_size, same_ratio, path, image_size):
@@ -61,16 +84,13 @@ class FeatureDataset(Dataset):
         if self.mode == 'train':
             self.t2w             = create_t2w(None)
             self.w2ts, self.data = create_w2ts(None)
-            self.t2i = {}
-            for i, t in enumerate(self.train):
-                self.t2i[t] = i
         else:
             SUB_DF   = path['root'] + path['sample_submission']
             submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
             self.data = self.submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
 
     def __getitem__(self, index):
-        tmp = self.data['index']
+        tmp = self.data[index]
         tmp = self.data_reader.read_for_validation(tmp)
         tmp = self.preprocess(tmp)
         return tmp
@@ -83,17 +103,17 @@ class FeatureDataset(Dataset):
 
 
 @data_ingredient.capture
-def create_feature_loader(batch_size, n_workers):
+def create_image_loader(batch_size, n_workers):
     data_reader     = cropDataGenerator()
     # TRAIN
-    train_siamese_dataset = SiameseDataset(data_reader, 'train')
-    train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=False, pin_memory=True,
+    train_image_dataset = ImageDataset(data_reader, 'train')
+    train_image_loader  = DataLoader(train_image_dataset, shuffle=False, pin_memory=True,
                                         num_workers=n_workers, batch_size=batch_size)
     # TEST
-    test_siamese_dataset   = SiameseDataset(data_reader, 'test')
-    test_siamese_loader    = DataLoader(test_siamese_dataset, shuffle=False, pin_memory=True,
+    test_image_dataset   = ImageDataset(data_reader, 'test')
+    test_image_loader    = DataLoader(test_image_dataset, shuffle=False, pin_memory=True,
                                         num_workers=n_workers, batch_size=batch_size)
-    return train_siamese_loader, test_siamese_loader
+    return train_image_loader, test_image_loader
 
 # ============== SiameseDataset ==========
 # ========================================
@@ -281,29 +301,29 @@ class cropDataGenerator():
         return image_aug
 
 # ============ TEST ===========
-# ex = Experiment('tmp', ingredients=[data_ingredient,
-#                                     meta_ingredient])
+ex = Experiment('tmp', ingredients=[data_ingredient,
+                                    meta_ingredient])
 
-# @ex.main
-# def main(data, path):
-#     train_loader, test_loader =  create_siamese_loader(set())
-#     data_reader     = cropDataGenerator()
-#     siamese_dataset = SiameseDataset(data_reader, 'train')
-#     visual_dataloader = DataLoader(siamese_dataset,
-#                                    shuffle=True,
-#                                    num_workers=4,
-#                                    batch_size=16)
-#     image_size = data['image_size']
-#     data_iter = iter(visual_dataloader)
-#     example_batch = next(data_iter)
-#     for i in range(8):
-#         a = example_batch[0][i,:,:]
-#         b = example_batch[1][i,:,:]
-#         a = a.reshape((image_size, image_size))
-#         b = b.reshape((image_size, image_size))
-#         print(example_batch[2][i])
-#         imshow(a)
-#         imshow(b)
+@ex.main
+def main(data, path):
+    train_loader, test_loader =  create_siamese_loader()
+    data_reader     = cropDataGenerator()
+    siamese_dataset = SiameseDataset(data_reader, 'train')
+    visual_dataloader = DataLoader(siamese_dataset,
+                                   shuffle=True,
+                                   num_workers=4,
+                                   batch_size=16)
+    image_size = data['image_size']
+    data_iter = iter(visual_dataloader)
+    example_batch = next(data_iter)
+    for i in range(8):
+        a = example_batch[0][i,:,:]
+        b = example_batch[1][i,:,:]
+        a = a.reshape((image_size, image_size))
+        b = b.reshape((image_size, image_size))
+        print(example_batch[2][i])
+        # imshow(a)
+        # imshow(b)
 
-# if __name__ == '__main__':
-#     ex.run_commandline()
+if __name__ == '__main__':
+    ex.run_commandline()

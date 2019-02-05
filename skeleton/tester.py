@@ -92,10 +92,9 @@ class Tester(object):
             return
         self.hook_funcs[name](self)
 
-    def predict_proba(self):
+    def get_feature(self):
         """start to test the model
         """
-        test_iters = len(self.test_dataloader)
         loader = tqdm(self.test_dataloader, ncols=0)
         loader.set_description('[Fold {:3}]'.format(self.fold))
         predict_probas = []

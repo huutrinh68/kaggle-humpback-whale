@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore')
 from optimizer import optimizer_ingredient, load_optimizer
 from criterion import criterion_ingredient, load_loss, f1_macro_aggregator
 from model import model_ingredient, load_model
-from data import data_ingredient, create_feature_loader
+from data import data_ingredient, create_image_loader, create_feature_loader
 from path import path_ingredient, prepair_dir
 
 ex = Experiment('Test', ingredients=[model_ingredient,      # model
@@ -79,27 +79,82 @@ def init(_run, seed, path):
 
     return device
 
+def gen_feature(model, loader):
+    features = []
+    for index, images in tqdm(enumerate(loader)):
+        images = images.cuda(non_blocking=True)
+        feature = model.get_features(images).detach().cpu().numpy()
+        features.append(feature)
+    features = np.concatenate(features, axis=0)
+    return features
+
+def gen_score(model, train_loader, test_loader):
+    scores = np.zeros((len(test_loader.dataset),
+                       len(train_loader.dataset)))
+    print(scores.shape)
+    i = 0
+    for test_feature in tqdm(test_loader):
+        k = 0
+        for train_feature in train_loader:
+            x = test_feature
+            y = train_feature
+
+            n_x = x.shape[0]
+            n_y = y.shape[0]
+            n_dim = x.shape[1]
+
+            x = x.repeat(1,1,n_y).reshape(-1,n_dim).cuda()
+            y = y.repeat(1,1,n_x).reshape(-1,n_dim).cuda()
+
+            score = model.get_score(x, y).detach().cpu().numpy()
+            score = score.reshape((n_x, n_y))
+            scores[i:i+n_x, k:k+n_y] = score
+
+            k += n_y
+        i += n_x
+
+    return scores
+
+def prepare_submit(scores, train_dataset, test_dataset,
+                   threshold, filename):
+    print(scores.shape)
+    with open(filename, 'wt', newline='\n') as f:
+        f.write('Image,Id\n')
+        for i, p in enumerate(tqdm(test_dataset.data)):
+            d = dict()
+            a = scores[i, :]
+            for j in list(reversed(np.argsort(a))):
+                p = train_dataset.data[j]
+                w = train_dataset.t2w[p]
+                if w not in d: d[w]  = 1
+                else:          d[w] += 1
+                if len(d) == 5:
+                    break
+            d = d.items()
+            d = sorted(d, key=lambda x:x[1], reverse=True)
+            ws = [w for w,c in d]
+            f.write(p + ',' + ' '.join(ws) + '\n')
+
 @ex.main
-def main(path):
-    # Model
+def main(path, data, threshold):
+    # Prepare
     device = init()
-    if torch.cuda.device_count() > 1:
-        model = torch.nn.DataParallel(load_model()).to(device)
-    else:
-        model = load_model().to(device)
+    model = load_model().cuda()
+    train_image_loader, test_image_loader = create_image_loader()
 
-    train_feature_loader, test_feature_loader = create_feature_loader()
-    data_iter = iter(train_feature_loader)
-    example_batch = next(data_iter)
+    # Load features
+    train_features = torch.from_numpy(gen_feature(model, train_image_loader))
+    test_features  = torch.from_numpy(gen_feature(model, test_image_loader))
 
-    # Features generating
-    train_feature_gen = Tester(
-        alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
-        code = get_dir_name(),
-        model=model,
-        test_dataloader=train_feature_loader,
-    )
-
+    # Calculate scores
+    train_feature_loader, test_feature_loader = create_feature_loader(train_features,
+                                                                      test_features)
+    scores = gen_score(model, train_feature_loader, test_feature_loader)
+    prepare_submit(scores,
+                   train_image_loader.dataset,
+                   test_image_loader.dataset,
+                   threshold,
+                   path['submit'] + get_dir_name() + '_' + str(threshold))
 
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
