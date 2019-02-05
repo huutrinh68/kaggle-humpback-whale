@@ -46,6 +46,142 @@ def cfg():
     # aug_train  = ['noop', 'fliplr', 'shear']
     # aug_tta    = ['noop', 'flipud', 'fliplr', 'rot90', 'rot-90']  # tta aug actions;
 
+# ============== featureDataset ==========
+# ========================================
+class FeatureDataset(Dataset):
+    @data_ingredient.capture
+    def __init__(self, data_reader, mode,
+                 batch_size, same_ratio, path, image_size):
+        self.data_reader = data_reader
+        self.same_ratio  = same_ratio
+        self.batch_size  = batch_size
+        self.image_size  = image_size
+        self.mode        = mode
+
+        if self.mode == 'train':
+            self.t2w             = create_t2w(None)
+            self.w2ts, self.data = create_w2ts(None)
+            self.t2i = {}
+            for i, t in enumerate(self.train):
+                self.t2i[t] = i
+        else:
+            SUB_DF   = path['root'] + path['sample_submission']
+            submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
+            self.data = self.submit = [p for _, p, _ in pd.read_csv(SUB_DF).to_records()]
+
+    def __getitem__(self, index):
+        tmp = self.data['index']
+        tmp = self.data_reader.read_for_validation(tmp)
+        tmp = self.preprocess(tmp)
+        return tmp
+
+    def __len__(self):
+        return len(self.data)
+
+    def preprocess(self,X):
+       return T.Compose([T.ToTensor()])(X).float()
+
+
+@data_ingredient.capture
+def create_feature_loader(batch_size, n_workers):
+    data_reader     = cropDataGenerator()
+    # TRAIN
+    train_siamese_dataset = SiameseDataset(data_reader, 'train')
+    train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=False, pin_memory=True,
+                                        num_workers=n_workers, batch_size=batch_size)
+    # TEST
+    test_siamese_dataset   = SiameseDataset(data_reader, 'test')
+    test_siamese_loader    = DataLoader(test_siamese_dataset, shuffle=False, pin_memory=True,
+                                        num_workers=n_workers, batch_size=batch_size)
+    return train_siamese_loader, test_siamese_loader
+
+# ============== SiameseDataset ==========
+# ========================================
+class SiameseDataset(Dataset):
+    @data_ingredient.capture
+    def __init__(self, data_reader, mode,
+                 batch_size, same_ratio, path, image_size):
+        self.data_reader = data_reader
+        self.same_ratio  = same_ratio
+        self.batch_size  = batch_size
+        self.image_size  = image_size
+        self.mode        = mode
+        self.t2w         = create_t2w(None)
+        self.w2ts, self.train = create_w2ts(None)
+        self.t2i = {}
+        for i, t in enumerate(self.train):
+            self.t2i[t] = i
+
+    def __getitem__(self, index):
+        if self.mode=='train':
+            should_choose_same = random.uniform(0, 1)
+            if should_choose_same < self.same_ratio:
+                a = self.train[index]
+                b = self.get_match(index)
+                c = 0
+            else:
+                a = self.train[index]
+                b = self.get_unmatch(index)
+                c = 1
+
+            a = self.data_reader.read_for_training(a)
+            b = self.data_reader.read_for_training(b)
+
+        else:
+            index = random.choice(range(len(self.train)))
+            should_choose_same = random.uniform(0, 1)
+            if should_choose_same < self.same_ratio:
+                a = self.train[index]
+                b = self.get_match(index)
+                c = 0
+            else:
+                a = self.train[index]
+                b = self.get_unmatch(index)
+                c = 1
+            a = self.data_reader.read_for_validation(a)
+            b = self.data_reader.read_for_validation(b)
+
+        _a = self.preprocess(a)
+        _b = self.preprocess(b)
+        return _a, _b, c
+
+    def get_match(self, idx):
+        whale = self.t2w[self.train[idx]]
+        t = random.choice(self.w2ts[whale])
+        return t
+
+    def get_unmatch(self, idx, filter=set()):
+        whale = self.t2w[self.train[idx]]
+        while True:
+            t = random.choice(self.train)
+            if whale != self.t2w[t] and t not in filter:
+                return t
+
+    @data_ingredient.capture
+    def __len__(self, valid_num):
+        if self.mode == 'train':
+            return len(list(self.train))
+        else:
+            return valid_num
+
+    def preprocess(self,X):
+       return T.Compose([T.ToTensor()])(X).float()
+
+
+@data_ingredient.capture
+def create_siamese_loader(batch_size, n_workers):
+    data_reader     = cropDataGenerator()
+    # TRAIN
+    train_siamese_dataset = SiameseDataset(data_reader, 'train')
+    train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=True, pin_memory=True,
+                                        num_workers=n_workers, batch_size=batch_size)
+    # VALID
+    val_siamese_dataset   = SiameseDataset(data_reader, 'test')
+    val_siamese_loader    = DataLoader(val_siamese_dataset, shuffle=False, pin_memory=True,
+                                        num_workers=n_workers, batch_size=batch_size)
+    return train_siamese_loader, val_siamese_loader
+
+
 # ============== cropDataGenerator ========
 # =========================================
 class cropDataGenerator():
@@ -144,93 +280,6 @@ class cropDataGenerator():
         image_aug = self.datagen.flow(image, batch_size=1)[0]
         return image_aug
 
-
-# ============== siameseDataset ==========
-# ========================================
-class SiameseDataset(Dataset):
-    @data_ingredient.capture
-    def __init__(self, data_reader, mode,
-                 batch_size, same_ratio, path, image_size):
-        self.data_reader = data_reader
-        self.same_ratio  = same_ratio
-        self.batch_size  = batch_size
-        self.image_size  = image_size
-        self.mode        = mode
-        self.t2w         = create_t2w(None)
-        self.w2ts, self.train = create_w2ts(None)
-        self.t2i = {}
-        for i, t in enumerate(self.train):
-            self.t2i[t] = i
-
-    def __getitem__(self, index):
-        if self.mode=='train':
-            should_choose_same = random.uniform(0, 1)
-            if should_choose_same < self.same_ratio:
-                a = self.train[index]
-                b = self.get_match(index)
-                c = 0
-            else:
-                a = self.train[index]
-                b = self.get_unmatch(index)
-                c = 1
-
-            a = self.data_reader.read_for_training(a)
-            b = self.data_reader.read_for_training(b)
-
-        else:
-            index = random.choice(range(len(self.train)))
-            should_choose_same = random.uniform(0, 1)
-            if should_choose_same < self.same_ratio:
-                a = self.train[index]
-                b = self.get_match(index)
-                c = 0
-            else:
-                a = self.train[index]
-                b = self.get_unmatch(index)
-                c = 1
-            a = self.data_reader.read_for_validation(a)
-            b = self.data_reader.read_for_validation(b)
-
-        _a = self.preprocess(a)
-        _b = self.preprocess(b)
-        return _a, _b, c
-
-    def get_match(self, idx):
-        whale = self.t2w[self.train[idx]]
-        t = random.choice(self.w2ts[whale])
-        return t
-
-    def get_unmatch(self, idx, filter=set()):
-        whale = self.t2w[self.train[idx]]
-        while True:
-            t = random.choice(self.train)
-            if whale != self.t2w[t] and t not in filter:
-                return t
-
-    @data_ingredient.capture
-    def __len__(self, valid_num):
-        if self.mode == 'train':
-            return len(list(self.train))
-        else:
-            return valid_num
-
-    def preprocess(self,X):
-       return T.Compose([T.ToTensor()])(X).float()
-
-
-@data_ingredient.capture
-def create_siamese_loader(batch_size, n_workers):
-    data_reader     = cropDataGenerator()
-    # TRAIN
-    train_siamese_dataset = SiameseDataset(data_reader, 'train')
-    train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=True, pin_memory=True,
-                                        num_workers=n_workers, batch_size=batch_size)
-    # VALID
-    val_siamese_dataset   = SiameseDataset(data_reader, 'test')
-    val_siamese_loader    = DataLoader(val_siamese_dataset, shuffle=False, pin_memory=True,
-                                        num_workers=n_workers, batch_size=batch_size)
-    return train_siamese_loader, val_siamese_loader
-
 # ============ TEST ===========
 # ex = Experiment('tmp', ingredients=[data_ingredient,
 #                                     meta_ingredient])
@@ -258,4 +307,3 @@ def create_siamese_loader(batch_size, n_workers):
 
 # if __name__ == '__main__':
 #     ex.run_commandline()
-

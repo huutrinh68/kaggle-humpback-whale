@@ -26,10 +26,13 @@ def cfg():
 @model_ingredient.capture
 def load_model(model, backbone, heads):
     if model == 'siamese':
+        print('Model: Siamese')
         return Siamese(backbone)
     elif model == 'multihead_siamese':
+        print('Model: Multihead siamese')
         return MultiheadSiamese(backbone, heads)
     elif model == 'boosting_siamese':
+        print('Model: Boosting siamese')
         return BoostingSiamese(backbone, heads)
     else:
         return Siamese(backbone)
