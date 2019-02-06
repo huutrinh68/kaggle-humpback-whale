@@ -104,10 +104,18 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
             _log.error('Unexpected exception! %s', e)
 
 @ex.capture
-def after_epoch_end(trainer, _run):
+def after_epoch_end(trainer, _run, optimizer):
     for metric in trainer.metrics:
         _run.log_scalar('{}_train_{}'.format(trainer.fold, metric), trainer.cache[metric]['train'][-1])
         _run.log_scalar('{}_val_{}'.format(trainer.fold, metric), trainer.cache[metric]['val'][-1])
+    adjust_learning_rate(trainer.optimizer, optimizer['lr'])
+
+def adjust_learning_rate(optimizer, lr):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    print('Reset learning rate to', lr)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
 
 @ex.capture
 def after_load_checkpoint(trainer, _run):

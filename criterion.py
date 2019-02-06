@@ -24,31 +24,34 @@ def load_loss(loss):
     else: return contrastiveLoss
 
 # ==========================
-def contrastiveLoss(output, target, margin=10e-8, mul=10e3):
-    margin *= mul
-    loss = torch.mean((1-target) * torch.pow(output, 2)
-                      + (target) * torch.pow(torch.clamp(margin - output, min=0.0), 2))
-    loss *= mul
+def contrastiveLoss(output, target, margin=10e-2, mul=1):
+    loss = torch.mean(target * torch.pow(1-output, 2)
+                      + (1-target) * torch.pow(torch.clamp(output-margin, min=0.0), 2))
+    # loss *= mul
     return loss
 
 # ==========================
 def binomialDevianceLoss(output, target, weights=None,
-                         beta1=1, beta2=0.5,
-                         mul=1, keep_shape=False):
+                         alpha=1, beta=0.25,
+                         mul=10e2, keep_shape=False):
     # loss of
-    # Positive sample (different class, target = 0) will be weighted by 25
+    # Negative sample (different class, target = 0) will be weighted by 25
     # Positive sample (same class,      target = 1) will be weighted by 1
-    balancer = (1-target) * 24 + 1
+    m = (target-1) * 26 + 1
+    neg_sum = torch.sum(target == 0)
+    pos_sum = torch.sum(target == 1)
+    w = (target==0) * (1/neg_sum) + (target==1) * (1/pos_sum)
+
     if weights == None:
-        loss = torch.log(1 + torch.exp(-(2*target - 1) * beta1 * (output - beta2) * balancer)) * mul
+        loss = torch.log(1 + torch.exp(-alpha*(output-beta) * m)) * mul
         if keep_shape == False: return torch.mean(loss)
         else: return loss
     else:
         loss = 0
         for _output, weight in zip(output, weights):
             _weight = weight.cuda(non_blocking=True)
-            loss += torch.log(1 + torch.exp(-(2*target - 1) * (_output - beta2) \
-                                            * beta1 * balancer )) * mul * _weight
+            loss += torch.log(1 + torch.exp(-alpha*(output-beta) * m)) * mul * _weight
+
         loss /= len(weights)
         return torch.mean(loss)
 

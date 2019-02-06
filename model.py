@@ -28,6 +28,9 @@ def load_model(model, backbone, heads):
     if model == 'siamese':
         print('Model: Siamese')
         return Siamese(backbone)
+    elif model == 'conv_siamese':
+        print('Model:Conv_siamese')
+        return ConvSiamese(backbone)
     elif model == 'multihead_siamese':
         print('Model: Multihead siamese')
         return MultiheadSiamese(backbone, heads)
@@ -48,6 +51,41 @@ class Siamese(nn.Module):
         )._features
         backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.name     = 'siamese'
+        self.backbone = backbone
+        self.feature_dims = 512
+
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=self.feature_dims, out_features=100),
+        )
+
+    def get_score(self, x, y):
+        score = (nn.CosineSimilarity()(x, y) + 1) / 2
+        return score
+
+    def forward(self, x):
+        xa, xb = x[0], x[1]
+        # Get features
+        feature_a = self.classifier(self.get_features(xa))
+        feature_b = self.classifier(self.get_features(xb))
+
+        score = self.get_score(feature_a, feature_b)
+        return score
+
+    def get_features(self, x):
+        x = self.backbone(x)
+        return x.reshape(*x.shape[:2], -1).max(-1)[0]
+
+# =====================================
+class ConvSiamese(nn.Module):
+    def __init__(self, backbone):
+        super().__init__()
+        backbone = make_model(
+            model_name=backbone,
+            pretrained=True,
+            num_classes=1
+        )._features
+        backbone[0] = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.name     = 'conv_siamese'
         self.backbone = backbone
         self.feature_dims = 512
 

@@ -185,6 +185,12 @@ class Trainer(object):
             self.current_epoch += 1
 
             self.model.train()
+
+            # Reset metrics aggregator
+            for metric in self.metrics:
+                self.metrics[metric]['train'].reset()
+                self.metrics[metric]['val'].reset()
+
             train_iters = len(self.train_dataloader)
             val_iters = len(self.val_dataloader)
 
@@ -446,6 +452,10 @@ class mean_aggregator():
     def update(self, target, output):
         self.sum += self.loss_func(target, output)
         self.count += len(target)
+
+    def reset(self):
+        self.sum = 0
+        self.count = 0
 
     def mean(self):
         _mean = self.sum / (self.count + 10e-15)

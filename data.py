@@ -154,12 +154,12 @@ class SiameseDataset(Dataset):
             should_choose_same = random.uniform(0, 1)
             if should_choose_same < self.same_ratio:
                 a = self.train[index]
-                b = self.get_match(index)
-                c = 0
+                b = self.get_match(index)n
+                c = 1
             else:
                 a = self.train[index]
                 b = self.get_unmatch(index)
-                c = 1
+                c = 0
             a = self.data_reader.read_for_validation(a)
             b = self.data_reader.read_for_validation(b)
 
@@ -172,11 +172,11 @@ class SiameseDataset(Dataset):
         t = random.choice(self.w2ts[whale])
         return t
 
-    def get_unmatch(self, idx, filter=set()):
+    def get_unmatch(self, idx):
         whale = self.t2w[self.train[idx]]
         while True:
             t = random.choice(self.train)
-            if whale != self.t2w[t] and t not in filter:
+            if whale != self.t2w[t]:
                 return t
 
     def set_seed(self, seed):
@@ -273,7 +273,8 @@ class cropDataGenerator():
         if x > y: ratio = self.image_size / x
         else:     ratio = self.image_size / y
         if int(x * ratio) != 0 and int(y * ratio) != 0:
-            img = cv2.resize(img, (int(x * ratio), int(y * ratio))).astype(float)
+            # img = cv2.resize(img, (int(x * ratio), int(y * ratio))).astype(float)
+            img = cv2.resize(img, (self.image_size, self.image_size)).astype(float)
             img -= np.mean(img, keepdims=True)
             img += np.abs(np.min(img))
             img /= np.std(img, keepdims=True)
