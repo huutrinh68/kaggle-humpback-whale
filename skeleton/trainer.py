@@ -203,6 +203,8 @@ class Trainer(object):
             for index, data in enumerate(loader):
                 # Loss
                 batch_loss = self.run_train_iteration(index, data, train_iters)
+                for metric in self.metrics:
+                    self.cache[metric]['train'].append(self.metrics[metric]['train'].mean())
                 total_train_loss += batch_loss
                 metrics_str = ''
                 for metric in self.metrics:
@@ -223,7 +225,8 @@ class Trainer(object):
                             for index, data in enumerate(self.val_dataloader):
                                 total_val_loss += self.run_val_iteration(index, data, val_iters)
                         val_loss = total_val_loss / val_iters
-
+                    for metric in self.metrics:
+                        self.cache[metric]['val'].append(val_loss)
                     metrics_str = ''
                     for metric in self.metrics:
                         metrics_str += ' |'
@@ -233,9 +236,9 @@ class Trainer(object):
                     loader.set_postfix_str(metrics_str)
                     logging.debug(metrics_str)
 
-            for metric in self.metrics:
-                self.cache[metric]['train'].append(self.metrics[metric]['train'].mean())
-                self.cache[metric]['val'].append(self.metrics[metric]['val'].mean())
+            # for metric in self.metrics:
+            #     self.cache[metric]['train'].append(self.metrics[metric]['train'].mean())
+            #     self.cache[metric]['val'].append(self.metrics[metric]['val'].mean())
 
             if self.drawer is not None:
                 self.drawer.scalars(
@@ -262,8 +265,11 @@ class Trainer(object):
 
     def to_cuda(self, inputs):
         if type(inputs) is list:
-            inputs = [input.cuda(non_blocking=True)
-                      for input in inputs]
+            shape = list(inputs[0].shape)
+            if len(shape) == 5:
+                shape = (shape[0] * shape[1], shape[2], shape[3], shape[4])
+                inputs = [input.reshape(shape) for input in inputs]
+            inputs = [input.cuda(non_blocking=True) for input in inputs]
         else:
             inputs.cuda(non_blocking=True)
         return inputs
@@ -275,7 +281,7 @@ class Trainer(object):
 
     # Normal
     def forward_normal(self, input, target):
-        images = input
+        target = target.view(-1, 1)
         images = self.to_cuda(input)
         score  = self.model(images)
         loss = self.loss_func(score, target)
@@ -287,7 +293,7 @@ class Trainer(object):
 
     # Multihead
     def forward_multihead(self, input, target):
-        target = target.view(target.shape[0], 1)
+        target = target.view(-1, 1)
         images = self.to_cuda(input)
         if self.status == 'train':
             score, plain_scores, boosting_weights = self.model.forward(images, target)
@@ -303,7 +309,7 @@ class Trainer(object):
 
     # Boosting
     def forward_boosting(self, input, target):
-        target = target.view(target.shape[0], 1)
+        target = target.view(-1, 1)
         images = self.to_cuda(input)
         if self.status == 'train':
             score, plain_scores, boosting_weights, aux_losses = self.model.forward(images, target)
@@ -326,6 +332,7 @@ class Trainer(object):
 
         # Predict
         *inputs, targets = data
+        targets = targets.view(-1, 1)
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
 
         if 'multihead_siamese' in self.code:
@@ -352,6 +359,7 @@ class Trainer(object):
         self.call_hook_func('before_val_iteration_start')
         # Predict
         *inputs, targets = data
+        targets = targets.view(-1, 1)
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
 
         if 'multihead' in self.code:
@@ -448,14 +456,27 @@ class mean_aggregator():
         self.loss_func = loss_func
         self.sum = 0
         self.count = 0
+        self.values = []
+        self.counts = []
 
     def update(self, target, output):
-        self.sum += self.loss_func(target, output)
+        value = self.loss_func(target, output)
+        self.sum += value
         self.count += len(target)
+        self.values.append(value)
+        self.counts.append(len(target))
+
+        if len(self.values) > 20:
+            self.sum   -= self.values[0]
+            self.count -= self.counts[0]
+            self.values = self.values[1:]
+            self.counts = self.counts[1:]
 
     def reset(self):
-        self.sum = 0
+        self.sum   = 0
         self.count = 0
+        self.values = []
+        self.counts = []
 
     def mean(self):
         _mean = self.sum / (self.count + 10e-15)

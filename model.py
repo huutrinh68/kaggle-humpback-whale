@@ -21,7 +21,7 @@ def cfg():
     backbone = 'resnet18' # resnet18 / resnet34 / bninception / seres50, default: bninception
     heads    = [32, 64, 128]
     if model == 'boosting_siamese':
-        heads    = [50, 100, 150, 200]
+        heads    = [40, 80, 120]
 
 @model_ingredient.capture
 def load_model(model, backbone, heads):

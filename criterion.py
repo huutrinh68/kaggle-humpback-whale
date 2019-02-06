@@ -24,11 +24,20 @@ def load_loss(loss):
     else: return contrastiveLoss
 
 # ==========================
-def contrastiveLoss(output, target, margin=10e-2, mul=1):
-    loss = torch.mean(target * torch.pow(1-output, 2)
-                      + (1-target) * torch.pow(torch.clamp(output-margin, min=0.0), 2))
-    # loss *= mul
-    return loss
+def contrastiveLoss(output, target, weights=None, margin=10e-2, mul=1, keep_shape=False):
+    if weights == None:
+        loss = target * torch.pow(1-output, 2) \
+               + (1-target) * torch.pow(torch.clamp(output-margin, min=0.0), 2)
+        if keep_shape == False: return torch.mean(loss)
+        else: return loss
+    else:
+        loss = 0
+        for _output, weight in zip(output, weights):
+            _weight = weight.cuda(non_blocking=True)
+            loss = target * torch.pow(1-_output, 2) \
+                   + (1-target) * torch.pow(torch.clamp(_output-margin, min=0.0), 2) * _weight
+        loss /= len(weights)
+        return torch.mean(loss)
 
 # ==========================
 def binomialDevianceLoss(output, target, weights=None,

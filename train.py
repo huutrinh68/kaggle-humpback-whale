@@ -1,3 +1,5 @@
+import torch.multiprocessing as multiprocessing
+
 import random
 import torch
 import warnings
@@ -10,8 +12,9 @@ from sacred.observers import MongoObserver, FileStorageObserver
 from sacred.utils import apply_backspaces_and_linefeeds
 from sacred.commands import print_config
 from tqdm import tqdm
-warnings.filterwarnings('ignore')
+from tensorboardX import SummaryWriter
 
+warnings.filterwarnings('ignore')
 # local import
 from optimizer import optimizer_ingredient, load_optimizer
 from criterion import criterion_ingredient, load_loss, f1_macro_aggregator
@@ -25,9 +28,13 @@ ex = Experiment('Train', ingredients=[model_ingredient,      # model
                                       path_ingredient,       # path
                                       criterion_ingredient]) # criterion
 
-ex.observers.append(MongoObserver.create(db_name='humpback_whale'))
-ex.observers.append(FileStorageObserver.create('exp_logs/experiments'))
+file_observer = FileStorageObserver.create('exp_logs/experiments')
+mongo_observer = MongoObserver.create(db_name='humpback_whale')
+
+ex.observers.append(mongo_observer)
+ex.observers.append(file_observer)
 ex.captured_out_filter = apply_backspaces_and_linefeeds
+writer = None
 
 @ex.config
 def cfg():
@@ -62,6 +69,7 @@ def init(_run, seed, path):
 def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold, debug, criterion):
     # Model
     device = init()
+    # model=load_model().to(device)
     if torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(load_model()).to(device)
     else:
@@ -71,7 +79,7 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
     optimizer = load_optimizer(model.parameters())
 
     # Data
-    train_siamese_loader, val_siamese_loader = create_siamese_loader()
+    train_siamese_loader, val_siamese_loader = create_siamese_loader(model=model)
 
     # Loss function
     loss_func = load_loss()
@@ -92,6 +100,7 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
                  'after_epoch_end': after_epoch_end,
                  'before_checkpoint_persisted':before_checkpoint_persisted,
                  'before_train_iteration_start':before_train_iteration_start,
+                 'after_train_iteration_end':after_train_iteration_end,
                  'after_backward': after_backward}
     )
 
@@ -106,7 +115,7 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold
 @ex.capture
 def after_epoch_end(trainer, _run, optimizer):
     for metric in trainer.metrics:
-        _run.log_scalar('{}_train_{}'.format(trainer.fold, metric), trainer.cache[metric]['train'][-1])
+    #     _run.log_scalar('{}_train_{}'.format(trainer.fold, metric), trainer.cache[metric]['train'][-1])
         _run.log_scalar('{}_val_{}'.format(trainer.fold, metric), trainer.cache[metric]['val'][-1])
     adjust_learning_rate(trainer.optimizer, optimizer['lr'])
 
@@ -133,6 +142,13 @@ def before_train_iteration_start(trainer, _run):
     pass
 
 @ex.capture
+def after_train_iteration_end(trainer, _run):
+    for metric in trainer.metrics:
+        if len(trainer.cache[metric]['train']) % 10 == 9:
+            _run.log_scalar('{}_train_{}'.format(trainer.fold, metric),
+                            trainer.cache[metric]['train'][-1])
+
+@ex.capture
 def after_backward(trainer, _run):
     pass
 
@@ -152,4 +168,5 @@ def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
 
 
 if __name__ == '__main__':
+    # multiprocessing.set_start_method('forkserver', force=True)
     ex.run_commandline()

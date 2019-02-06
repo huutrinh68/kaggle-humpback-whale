@@ -3,6 +3,7 @@ import gc
 import random
 import numpy as np
 import pandas as pd
+import torch
 
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
@@ -31,7 +32,7 @@ iaa_dict = {'rot90' : iaa.Affine(rotate=90),
 
 @data_ingredient.config
 def cfg():
-    image_size = 512            # image size
+    image_size = 128            # image size
     n_workers  = 4              # num of loader workers
     batch_size = 40             # batch size
     augment    = True           # train augment
@@ -42,6 +43,7 @@ def cfg():
     same_ratio = 0.5
     valid_num  = 1000
     test_batch_size = 100
+    n_pair     = 5
     # aug_train  = ['noop', 'rot90', 'rot180', 'rot270', 'shear',
     #               'flipud', 'fliplr']                             # train aug actions
     # aug_train  = ['noop', 'fliplr', 'shear']
@@ -120,7 +122,7 @@ def create_image_loader(batch_size, n_workers):
 # ========================================
 class SiameseDataset(Dataset):
     @data_ingredient.capture
-    def __init__(self, data_reader, mode,
+    def __init__(self, data_reader, mode, test_data, valid_num, model,
                  batch_size, same_ratio, path, image_size):
         self.data_reader = data_reader
         self.same_ratio  = same_ratio
@@ -128,54 +130,118 @@ class SiameseDataset(Dataset):
         self.image_size  = image_size
         self.mode        = mode
         self.t2w         = create_t2w(None)
-        self.w2ts, self.train = create_w2ts(None)
+        self.w2ts, self.data = create_w2ts(None)
         self.t2i = {}
-        for i, t in enumerate(self.train):
+        for i, t in enumerate(self.data):
             self.t2i[t] = i
+        self.model       = model
 
-    def __getitem__(self, index):
-        index = index % len(self.train)
-        if self.mode=='train':
-            should_choose_same = random.uniform(0, 1)
-            if should_choose_same < self.same_ratio:
-                a = self.train[index]
+        # Create test set
+        # these sample will not be used in training
+        if test_data == None:
+            tmp_data = []
+            for i in range(valid_num):
+                while True:
+                    index = random.choice(range(len(self.data)))
+                    whale = self.t2w[self.data[index]]
+                    n_same_whale = len(self.w2ts[whale])
+                    if n_same_whale > 10:
+                        break
+                # Positive (same whale)
+                a = self.data[index]
                 b = self.get_match(index)
                 c = 1
-            else:
-                a = self.train[index]
+                tmp_data.append((a,b,c))
+                # Negative (different whale)
+                a = self.data[index]
                 b = self.get_unmatch(index)
                 c = 0
+                tmp_data.append((a,b,c))
+            self.test_data = tmp_data
+        else:
+            self.test_data = test_data
 
+        self.test_set = set(self.test_data)
+
+    @data_ingredient.capture
+    def __getitem__(self, index, n_pair):
+        # Train mode
+        if self.mode=='train':
+            should_choose_same = random.uniform(0, 1)
+            a = self.data[index]
+            _pos_b = []
+            # Generate match pair
+            for i in range(n_pair):
+                while True:
+                    b = self.get_match(index)
+                    if (a,b,1) not in self.test_set and \
+                       (b,a,1) not in self.test_set: break
+                _pos_b.append(b)
+            _a_img  = self.preprocess(self.data_reader.read_for_training(a))
+            _a_tensor = _a_img.view(1,1,self.image_size, self.image_size)
+            _a_feature = self.model.module.get_features(_a_tensor.cuda())
+
+            _pos_b_imgs = [self.preprocess(self.data_reader.read_for_training(b))
+                           for b in _pos_b]
+            _pos_b_tensor = torch.cat(_pos_b_imgs, 0).reshape(n_pair, 1,
+                                                              self.image_size,
+                                                              self.image_size)
+
+            # Generate unmatch pair
+            _neg_b = []
+            n_trial = 2*n_pair
+            for i in range(n_trial):
+                while True:
+                    b = self.get_unmatch(index)
+                    if (a,b,0) not in self.test_set and \
+                       (b,a,0) not in self.test_set: break
+                _neg_b.append(b)
+
+            # Calculate score for negative samples
+            _neg_b_imgs = [self.preprocess(self.data_reader.read_for_training(b))
+                           for b in _neg_b]
+            _neg_b_tensor = torch.cat(_neg_b_imgs, 0).reshape(n_trial, 1,
+                                                              self.image_size,
+                                                              self.image_size)
+            _neg_b_feature = self.model.module.get_features(_neg_b_tensor.cuda())
+
+            # Manipulate a_feature to get the same shape with b
+            _a_feature = _a_feature.repeat((_neg_b_feature.shape[0], 1))
+
+            # Calculate score
+            scores = self.model.module.get_score(_a_feature, _neg_b_feature)\
+                                      .detach().cpu().numpy()
+            hard_index = np.argsort(scores)[-n_pair:].tolist()
+
+            # Get tensor
+            _a_tensor = _a_tensor.view(self.image_size, self.image_size)
+            _a_tensor = _a_tensor.repeat(n_pair, 1, 1, 1)
+            _neg_b_tensor = _neg_b_tensor[hard_index, :, :, :]
+
+            _a = torch.cat((_a_tensor, _a_tensor), 0)
+            _b = torch.cat((_pos_b_tensor, _neg_b_tensor), 0)
+            _c = torch.tensor([1] * n_pair + [0] * n_pair)
+
+        # Test mode
+        else:
+            a,b,c = self.test_data[index]
             a = self.data_reader.read_for_training(a)
             b = self.data_reader.read_for_training(b)
+            _a = self.preprocess(a)
+            _b = self.preprocess(b)
+            _c = c
 
-        else:
-            index = random.choice(range(len(self.train)))
-            should_choose_same = random.uniform(0, 1)
-            if should_choose_same < self.same_ratio:
-                a = self.train[index]
-                b = self.get_match(index)n
-                c = 1
-            else:
-                a = self.train[index]
-                b = self.get_unmatch(index)
-                c = 0
-            a = self.data_reader.read_for_validation(a)
-            b = self.data_reader.read_for_validation(b)
-
-        _a = self.preprocess(a)
-        _b = self.preprocess(b)
-        return _a, _b, c
+        return _a, _b, _c
 
     def get_match(self, idx):
-        whale = self.t2w[self.train[idx]]
+        whale = self.t2w[self.data[idx]]
         t = random.choice(self.w2ts[whale])
         return t
 
     def get_unmatch(self, idx):
-        whale = self.t2w[self.train[idx]]
+        whale = self.t2w[self.data[idx]]
         while True:
-            t = random.choice(self.train)
+            t = random.choice(self.data)
             if whale != self.t2w[t]:
                 return t
 
@@ -185,25 +251,30 @@ class SiameseDataset(Dataset):
     @data_ingredient.capture
     def __len__(self, valid_num):
         if self.mode == 'train':
-            return len(list(self.train))
+            return len(list(self.data))
         else:
-            return valid_num
+            return len(list(self.test_data))
 
     def preprocess(self,X):
        return T.Compose([T.ToTensor()])(X).float()
 
 
 @data_ingredient.capture
-def create_siamese_loader(batch_size, n_workers):
+def create_siamese_loader(model, batch_size, n_workers):
     data_reader     = cropDataGenerator()
-    # TRAIN
-    train_siamese_dataset = SiameseDataset(data_reader, 'train')
-    train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=True, pin_memory=True,
-                                        num_workers=n_workers, batch_size=batch_size)
     # VALID
-    val_siamese_dataset   = SiameseDataset(data_reader, 'test')
+    val_siamese_dataset   = SiameseDataset(data_reader, 'test', test_data=None, model=model)
     val_siamese_loader    = DataLoader(val_siamese_dataset, shuffle=False, pin_memory=True,
-                                        num_workers=n_workers, batch_size=batch_size)
+                                       # num_workers = n_workers,
+                                       batch_size=batch_size)
+
+    # TRAIN
+    test_data = val_siamese_dataset.test_data
+    train_siamese_dataset = SiameseDataset(data_reader, 'train', test_data=test_data, model=model)
+    train_siamese_loader  = DataLoader(train_siamese_dataset, shuffle=True, pin_memory=True,
+                                       # num_workers = n_workers,
+                                       batch_size=batch_size)
+
     return train_siamese_loader, val_siamese_loader
 
 
