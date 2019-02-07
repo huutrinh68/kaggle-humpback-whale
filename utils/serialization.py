@@ -4,6 +4,8 @@ import os
 import shutil
 
 import torch
+import numpy as np
+
 from torch.nn import Parameter
 
 from .osutils import mkdir_if_missing
@@ -40,11 +42,12 @@ def load_latest(dirpath):
     if os.path.isdir(dirpath):
         fpaths = [path for path in os.listdir(dirpath)
                   if 'ckp' in path]
-        fpaths = sorted(fpaths)
+        epoch  = [int(path.split('ep')[1][:-8])
+                  for path in fpaths]
         if len(fpaths) == 0:
             return None
-
-        fpath  = os.path.join(dirpath, fpaths[-1])
+        latest = np.argmax(epoch)
+        fpath  = os.path.join(dirpath, fpaths[latest])
         checkpoint = torch.load(fpath)
         print("=> Loaded checkpoint '{}'".format(fpath))
         return checkpoint
