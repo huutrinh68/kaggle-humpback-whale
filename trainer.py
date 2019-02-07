@@ -2,14 +2,15 @@
 from __future__ import print_function, absolute_import
 import time
 from utils import AverageMeter, orth_reg
-import  torch
+import torch
+import sacred
 from torch.autograd import Variable
 from torch.backends import cudnn
 
 cudnn.benchmark = True
 
 
-def train(epoch, model, criterion, optimizer, train_loader, args):
+def train(epoch, model, criterion, optimizer, train_loader, args, run=None):
 
     losses = AverageMeter()
     batch_time = AverageMeter()
@@ -60,9 +61,14 @@ def train(epoch, model, criterion, optimizer, train_loader, args):
                   (epoch + 1, i + 1, len(train_loader), batch_time=batch_time,
                    loss=losses, accuracy=accuracy, pos=pos_sims, neg=neg_sims))
 
+            if type(run) is sacred.run.Run:
+                run.log_scalar('Loss', losses.avg)
+                run.log_scalar('Accuracy', accuracy.avg)
+                run.log_scalar('Pos', pos_sims.avg)
+                run.log_scalar('Neg', neg_sims.avg)
+
         if epoch == 0 and i == 0:
             print('-- HA-HA-HA-HA-AH-AH-AH-AH --')
-
 
 
 

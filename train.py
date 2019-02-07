@@ -4,7 +4,9 @@ import time
 import argparse
 import os
 import sys
+import json
 import torch.utils.data
+
 from torch.backends import cudnn
 from torch.autograd import Variable
 import models
@@ -17,8 +19,16 @@ from utils import orth_reg
 import DataSet
 import numpy as np
 import os.path as osp
-cudnn.benchmark = True
 
+from sacred import Experiment
+from sacred.observers import MongoObserver, FileStorageObserver
+from sacred.commands import print_config
+
+ex = Experiment('Train')
+ex.observers.append(MongoObserver.create(db_name='humpback_whale'))
+ex.observers.append(FileStorageObserver.create('logs/experiments'))
+
+cudnn.benchmark = True
 use_gpu = True
 
 
@@ -27,10 +37,13 @@ def set_bn_eval(m):
     if classname.find('BatchNorm') != -1:
         m.eval()
 
+@ex.config
+def cfg():
+    args = None
 
-def main(args):
+@ex.main
+def main(_run):
     # s_ = time.time()
-
     save_dir = args.save_dir
     mkdir_if_missing(save_dir)
 
@@ -96,7 +109,8 @@ def main(args):
     for epoch in range(start, args.epochs):
 
         train(epoch=epoch, model=model, criterion=criterion,
-              optimizer=optimizer, train_loader=train_loader, args=args)
+              optimizer=optimizer, train_loader=train_loader, args=args,
+              run=_run)
 
         if epoch == 1:
             optimizer.param_groups[0]['lr_mul'] = 0.1
@@ -146,13 +160,13 @@ if __name__ == '__main__':
     # network
     parser.add_argument('--freeze_BN', default=True, type=bool, required=False, metavar='N',
                         help='Freeze BN if True')
-    parser.add_argument('--data', default='cub', required=True,
+    parser.add_argument('--data', default='whale', required=False,
                         help='name of Data Set')
     parser.add_argument('--data_root', type=str, default=None,
                         help='path to Data Set')
 
-    parser.add_argument('--net', default='VGG16-BN')
-    parser.add_argument('--loss', default='branch', required=True,
+    parser.add_argument('--net', default='resnet18')
+    parser.add_argument('--loss', default='batchall', required=False,
                         help='loss for training network')
     parser.add_argument('--epochs', default=600, type=int, metavar='N',
                         help='epochs for training process')
@@ -178,8 +192,19 @@ if __name__ == '__main__':
     parser.add_argument('--weight-decay', type=float, default=2e-4)
 
     parser.add_argument('--loss_base', type=float, default=0.75)
+    parser.add_argument('--reload', type=str, default=None)
 
+    args = parser.parse_args()
+    if args.save_dir == None:
+        args.save_dir \
+            = 'logs/checkpoints/' + \
+            'net_{}_{}_'.format(args.net, args.dim) + \
+            'loss_{}_{}_{}_{}_'.format(args.loss, args.alpha, args.beta, args.margin) + \
+            'data_{}_{}_{}'.format(args.width, args.batch_size, args.num_instances)
 
+    if args.reload != None:
+        config_path = 'logs/experiments/{}/config.json'.format(args.reload)
+        with open(config_path) as f:
+            args = argparse.Namespace(**json.load(f)['args'])
 
-
-    main(parser.parse_args())
+    ex.run(config_updates={'args':args})
