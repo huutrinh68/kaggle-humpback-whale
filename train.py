@@ -54,7 +54,7 @@ def main(_run):
     model = models.create(args.net, pretrained=True, dim=args.dim)
 
     # for vgg and densenet
-    if args.resume in [False, None]:
+    if args.resume in ['False', False, None]:
         weight = model.state_dict()
     else:
         # resume model
