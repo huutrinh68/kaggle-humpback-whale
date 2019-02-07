@@ -26,11 +26,12 @@ from .EnsembleDWNeighbourLoss import EnsembleDWNeighbourLoss
 # from .JSDivKNNSoftmaxLoss import JSDivKNNSoftmaxLoss
 from .A_triplet import ATriplet
 from .Batchall import BatchAll
+from .BatchHard import BatchHardLoss
 from .ABatchall import ABatchAll
 from .A_hard_pair import AHardPair
 from .Grad_NCA import Grad_NCA
 from .CenterNCALoss import CenterNCALoss
-
+from .Weight import WeightLoss
 
 __factory = {
     'softneig': SoftmaxNeigLoss,
@@ -56,10 +57,12 @@ __factory = {
     'triplet': Triplet,
     'Atriplet': ATriplet,
     'batchall': BatchAll,
+    'batchhard': BatchHardLoss,
     'Abatchall': ABatchAll,
     'Ahardpair': AHardPair,
     'Grad_nca': Grad_NCA,
     'center-nca': CenterNCALoss,
+    'Weight': WeightLoss
 }
 
 
