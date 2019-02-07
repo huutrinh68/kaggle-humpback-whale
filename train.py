@@ -78,7 +78,7 @@ def main(_run):
         print(40*'#', 'BatchNorm NOT frozen')
 
     # Fine-tune the model: the learning rate for pre-trained parameter is 1/10
-    new_param_ids = set(map(id, model.module.classifier.parameters()))
+    new_param_ids = set(map(id, model.module._classifier.parameters()))
 
     new_params = [p for p in model.module.parameters() if
                   id(p) in new_param_ids]
