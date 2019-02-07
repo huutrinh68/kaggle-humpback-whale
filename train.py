@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import models
 import losses
 from utils import FastRandomIdentitySampler, mkdir_if_missing, logging, display
-from utils.serialization import save_checkpoint, load_checkpoint
+from utils.serialization import save_checkpoint, load_checkpoint, load_latest
 from trainer import train
 from utils import orth_reg
 
@@ -54,16 +54,18 @@ def main(_run):
     model = models.create(args.net, pretrained=True, dim=args.dim)
 
     # for vgg and densenet
-    if args.resume is None:
-        model_dict = model.state_dict()
-
+    if args.resume in [False, None]:
+        weight = model.state_dict()
     else:
         # resume model
-        print('load model from {}'.format(args.resume))
-        chk_pt = load_checkpoint(args.resume)
-        weight = chk_pt['state_dict']
-        start = chk_pt['epoch']
-        model.load_state_dict(weight)
+        if args.resume in ['latest', True]:
+            chk_pt = load_latest(args.save_dir)
+        else:
+            chk_pt = load_checkpoint(args.resume)
+        if chk_pt != None:
+            weight = chk_pt['state_dict']
+            start = chk_pt['epoch']
+            model.load_state_dict(weight)
 
     model = torch.nn.DataParallel(model)
     model = model.cuda()
@@ -174,7 +176,7 @@ if __name__ == '__main__':
                         help='number of epochs to save model')
 
     # Resume from checkpoint
-    parser.add_argument('--resume', '-r', default=None,
+    parser.add_argument('--resume', '-r', default=True,
                         help='the path of the pre-trained model')
 
     # train
@@ -203,8 +205,11 @@ if __name__ == '__main__':
             'data_{}_{}_{}'.format(args.width, args.batch_size, args.num_instances)
 
     if args.reload != None:
+        resume = args.resume
         config_path = 'logs/experiments/{}/config.json'.format(args.reload)
         with open(config_path) as f:
-            args = argparse.Namespace(**json.load(f)['args'])
+            config = json.load(f)['args']
+            config['resume'] = resume
+            args = argparse.Namespace(**config)
 
     ex.run(config_updates={'args':args})
