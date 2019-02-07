@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Deep Metric Learning
 
 ### Learn a deep metric which can be used image retrieval , clustering.
