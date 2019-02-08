@@ -61,6 +61,7 @@ class MyData(data.Dataset):
         self.Index = Index
         self.indexed_labels = indexed_labels
         self.loader = loader
+        self.mode = mode
 
     def __getitem__(self, index):
         fn, label = self.images[index], self.indexed_labels[self.labels[index]]
@@ -86,7 +87,7 @@ class BBLoader():
 
     def load(self, root, fn):
         path = os.path.join(root, fn)
-        img = Image.open(path).convert('RGB')
+        img = Image.open(path)
         size_x, size_y = img.size
 
         # Crop the image using bbox
@@ -122,27 +123,37 @@ class Whale:
         train_csv = os.path.join(root, 'train.csv')
         test_csv  = os.path.join(root, 'sample_submission.csv')
         bb_loader = BBLoader(root)
-        self.train = MyData(root, label_csv=train_csv, transform=transform_Dict['resize'],
+        self.train = MyData(root, label_csv=train_csv, transform=transform_Dict['resize_agg'],
                             mode='train', loader=bb_loader.load)
         self.gallery = MyData(root, label_csv=test_csv, transform=transform_Dict['resize'],
                               mode='test', loader=bb_loader.load)
 
 def Generate_transform_Dict(origin_width=256, width=224, ratio=0.16):
-    std_value = 1.0 / 255.0
-    # normalize = transforms.Normalize(mean=[104 / 255.0, 117 / 255.0, 128 / 255.0],
-    #                                  std= [1.0/255, 1.0/255, 1.0/255])
-    normalize = transforms.Normalize(mean=[104 / 255.0, 117 / 255.0, 128 / 255.0],
-                                     std= [1.0/255, 1.0/255, 1.0/255])
-
     transform_dict = {}
     transform_dict['resize'] = \
     transforms.Compose([
-                    CovertBGR(),
-                    transforms.Resize((width, width)),
-                    transforms.CenterCrop(width),
-                    transforms.ToTensor(),
-                    normalize,
-                ])
+        transforms.Resize((width, width)),
+        transforms.Grayscale(3),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[50/255.0],
+                             std=[1.0/255.0]),
+    ])
+    transform_dict['resize_agg'] = \
+    transforms.Compose([
+        transforms.Resize((width,width)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ColorJitter(brightness=0.2,
+                               contrast=0.01,
+                               saturation=0.01,
+                               hue=0.01),
+        transforms.RandomRotation(8),
+        transforms.RandomResizedCrop(size=512,
+                                     scale=(0.95,1)),
+        transforms.Grayscale(3),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[50/255.0],
+                             std=[1.0/255.0])
+])
     return transform_dict
 
 def testWhale():
