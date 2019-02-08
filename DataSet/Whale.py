@@ -38,18 +38,19 @@ class MyData(data.Dataset):
 
         for img_anon in images_anon:
             [img, label] = img_anon.split(',')
+            label = label[:-1]
             if label == 'new_whale': continue
             images.append(img)
             if label not in indexed_labels:
                 indexed_labels[label] = len(list(indexed_labels.keys()))
-            labels.append(indexed_labels[label])
+            labels.append(label)
 
         classes = list(set(labels))
 
         # Generate Index Dictionary for every class
         Index = defaultdict(list)
         for i, label in enumerate(labels):
-            Index[label].append(i)
+            Index[indexed_labels[label]].append(i)
 
         # Initialization Done
         self.root = root
@@ -62,7 +63,7 @@ class MyData(data.Dataset):
         self.loader = loader
 
     def __getitem__(self, index):
-        fn, label = self.images[index], self.labels[index]
+        fn, label = self.images[index], self.indexed_labels[self.labels[index]]
         img = self.loader(self.root, fn)
         if self.transform is not None:
             img = self.transform(img)
