@@ -25,9 +25,7 @@ def Recall_at_ks(sim_mat, data='cub', query_ids=None, gallery_ids=None):
     ks_dict['jd'] = [1, 2, 4, 8]
     ks_dict['product'] = [1, 10, 100, 1000]
     ks_dict['shop'] = [1, 10, 20, 30, 40, 50]
-
-    if data is None:
-        data = 'cub'
+    ks_dict['whale'] = [1, 5, 10, 20]
     k_s = ks_dict[data]
 
     sim_mat = to_numpy(sim_mat)
@@ -67,8 +65,7 @@ def Recall_at_ks(sim_mat, data='cub', query_ids=None, gallery_ids=None):
             num_valid[i:] += temp - num_valid[i-1]
     # t = time.time() - start_time
     # print(t)
-    return num_valid / float(m)
-
+    return num_valid / float(m), k_s
 
 def test():
     sim_mat = torch.rand(int(7e2), int(14e2))
