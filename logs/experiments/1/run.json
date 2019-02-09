@@ -1,0 +1,123 @@
+{
+  "artifacts": [],
+  "command": "main",
+  "experiment": {
+    "base_dir": "/home/scientist/huutrinh/work/kaggle/humpback/humpback-whale",
+    "dependencies": [
+      "numpy==1.16.1",
+      "sacred==0.7.4",
+      "torch==0.3.1"
+    ],
+    "mainfile": "train.py",
+    "name": "Train",
+    "repositories": [],
+    "sources": [
+      [
+        "DataSet/__init__.py",
+        "_sources/__init___83625cd2008ad40593ebf1ab7f74490b.py"
+      ],
+      [
+        "losses/__init__.py",
+        "_sources/__init___c40a5c81f4b597e5f6e8fa12172bc7f5.py"
+      ],
+      [
+        "models/__init__.py",
+        "_sources/__init___1b6f475a1333e6088437595281478afa.py"
+      ],
+      [
+        "train.py",
+        "_sources/train_46cd4c82a6d589296bce4e25930b23c7.py"
+      ],
+      [
+        "trainer.py",
+        "_sources/trainer_1790fb872ae5859f60d6ef61136827e8.py"
+      ],
+      [
+        "utils/HyperparamterDisplay.py",
+        "_sources/HyperparamterDisplay_0d574960d5fcf325e5ad955b25fec930.py"
+      ],
+      [
+        "utils/__init__.py",
+        "_sources/__init___86d67c2b95901e3f451ba230d735463a.py"
+      ],
+      [
+        "utils/logging.py",
+        "_sources/logging_f6f8fafe525a8af5cab5e21514d8bf8b.py"
+      ],
+      [
+        "utils/orthogonal_regularizaton.py",
+        "_sources/orthogonal_regularizaton_02387ac789db5f88ee59d4bcd7a0be66.py"
+      ],
+      [
+        "utils/osutils.py",
+        "_sources/osutils_7f088c16bcaa070cc4c617bff997b43e.py"
+      ],
+      [
+        "utils/sampler.py",
+        "_sources/sampler_ff1896027e5de4f38c8becdd95ed9911.py"
+      ],
+      [
+        "utils/serialization.py",
+        "_sources/serialization_58b9642517527db93ac6e0b364d9148e.py"
+      ]
+    ]
+  },
+  "fail_trace": [
+    "Traceback (most recent call last):\n",
+    "  File \"/home/scientist/anaconda3/envs/torch0.3/lib/python3.6/site-packages/sacred/config/captured_function.py\", line 46, in captured_function\n    result = wrapped(*args, **kwargs)\n",
+    "  File \"train.py\", line 115, in main\n    run=_run)\n",
+    "  File \"/home/scientist/huutrinh/work/kaggle/humpback/humpback-whale/trainer.py\", line 43, in train\n    optimizer.step()\n",
+    "  File \"/home/scientist/anaconda3/envs/torch0.3/lib/python3.6/site-packages/torch/optim/adam.py\", line 78, in step\n    p.data.addcdiv_(-step_size, exp_avg, denom)\n",
+    "  File \"/home/scientist/anaconda3/envs/torch0.3/lib/python3.6/site-packages/torch/utils/data/dataloader.py\", line 175, in handler\n    _error_if_any_worker_fails()\n",
+    "RuntimeError: DataLoader worker (pid 6198) is killed by signal: Killed.\n"
+  ],
+  "heartbeat": "2019-02-09T08:34:44.418083",
+  "host": {
+    "ENV": {},
+    "cpu": "Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz",
+    "gpus": {
+      "driver_version": "410.93",
+      "gpus": [
+        {
+          "model": "GeForce GTX 1080 Ti",
+          "persistence_mode": false,
+          "total_memory": 11178
+        }
+      ]
+    },
+    "hostname": "hn0",
+    "os": [
+      "Linux",
+      "Linux-3.10.0-957.el7.x86_64-x86_64-with-centos-7.6.1810-Core"
+    ],
+    "python_version": "3.6.0"
+  },
+  "meta": {
+    "command": "main",
+    "options": {
+      "--beat_interval": null,
+      "--capture": null,
+      "--comment": null,
+      "--debug": false,
+      "--enforce_clean": false,
+      "--file_storage": null,
+      "--force": false,
+      "--help": false,
+      "--loglevel": null,
+      "--mongo_db": null,
+      "--name": null,
+      "--pdb": false,
+      "--print_config": false,
+      "--priority": null,
+      "--queue": false,
+      "--sql": null,
+      "--tiny_db": null,
+      "--unobserved": false
+    }
+  },
+  "resources": [],
+  "result": null,
+  "start_time": "2019-02-09T02:00:37.299287",
+  "status": "FAILED",
+  "stop_time": "2019-02-09T08:34:44.489095"
+}

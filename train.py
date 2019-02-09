@@ -25,7 +25,7 @@ from sacred.observers import MongoObserver, FileStorageObserver
 from sacred.commands import print_config
 
 ex = Experiment('Train')
-ex.observers.append(MongoObserver.create(db_name='humpback_whale'))
+#ex.observers.append(MongoObserver.create(db_name='humpback_whale'))
 ex.observers.append(FileStorageObserver.create('logs/experiments'))
 
 cudnn.benchmark = True

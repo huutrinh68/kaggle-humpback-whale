@@ -1,0 +1,15 @@
+Data Set 	whale
+Network 	resnet34
+Loss Function 	batchall
+Embedded Dim 	256
+Image size 	224
+Learn Rate  	1.0e-05
+Epochs  	00600
+Batch Size  	50
+Num-Instance  	10
+Log Path 	logs/checkpoints/net_resnet34_256_loss_batchall_30_0.1_0.5_data_224_50_10
+########################################
+=> Loaded checkpoint 'logs/checkpoints/net_resnet34_256_loss_batchall_30_0.1_0.5_data_224_50_10/ckp_ep1.pth.tar'
+######################################## 
+ BatchNorm frozen
+initial model is save at logs/checkpoints/net_resnet34_256_loss_batchall_30_0.1_0.5_data_224_50_10

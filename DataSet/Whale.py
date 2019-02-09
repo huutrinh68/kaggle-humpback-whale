@@ -23,7 +23,7 @@ class MyData(data.Dataset):
                  transform=None, mode='train', loader=default_loader):
 
         # Initialization data path and train(gallery or query) txt path
-        root = os.path.join('/home/tran/workspace/kaggle/new-humpback-whale-identification/input/',
+        root = os.path.join('/home/scientist/huutrinh/work/kaggle/humpback/input/',
                             mode + '/')
 
         if transform is None:
@@ -118,7 +118,7 @@ class Whale:
         if transform is None:
             transform_Dict = Generate_transform_Dict(origin_width=origin_width, width=width, ratio=ratio)
         if root is None:
-            root = '/home/tran/workspace/kaggle/new-humpback-whale-identification/input/'
+            root = '/home/scientist/huutrinh/work/kaggle/humpback/input/'
 
         train_csv = os.path.join(root, 'train.csv')
         test_csv  = os.path.join(root, 'sample_submission.csv')

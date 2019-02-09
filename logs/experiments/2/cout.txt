@@ -1,0 +1,32 @@
+INFO - Train - Running command 'main'
+INFO - Train - Started run with ID "2"
+Data Set 	whale
+Network 	resnet34
+Loss Function 	batchall
+Embedded Dim 	256
+Image size 	224
+Learn Rate  	1.0e-05
+Epochs  	00600
+Batch Size  	50
+Num-Instance  	10
+Log Path 	logs/checkpoints/net_resnet34_256_loss_batchall_30_0.1_0.5_data_224_50_10
+########################################
+=> Loaded checkpoint 'logs/checkpoints/net_resnet34_256_loss_batchall_30_0.1_0.5_data_224_50_10/ckp_ep1.pth.tar'
+######################################## 
+ BatchNorm frozen
+initial model is save at logs/checkpoints/net_resnet34_256_loss_batchall_30_0.1_0.5_data_224_50_10
+Epoch: [002][20/1000]	Time 1.057	Loss 0.3646 	Accuracy 0.1940 	Pos 0.3774	Neg 1.1969 	
+Epoch: [002][40/1000]	Time 0.818	Loss 0.3701 	Accuracy 0.1605 	Pos 0.4091	Neg 1.2174 	
+Epoch: [002][60/1000]	Time 0.740	Loss 0.3503 	Accuracy 0.1927 	Pos 0.4148	Neg 1.2507 	
+Epoch: [002][80/1000]	Time 0.700	Loss 0.3565 	Accuracy 0.2162 	Pos 0.4071	Neg 1.2656 	
+Epoch: [002][100/1000]	Time 0.676	Loss 0.3486 	Accuracy 0.2340 	Pos 0.4008	Neg 1.2750 	
+Epoch: [002][120/1000]	Time 0.661	Loss 0.3657 	Accuracy 0.2260 	Pos 0.4021	Neg 1.2746 	
+Epoch: [002][140/1000]	Time 0.650	Loss 0.3616 	Accuracy 0.2181 	Pos 0.3969	Neg 1.2505 	
+Epoch: [002][160/1000]	Time 0.641	Loss 0.3586 	Accuracy 0.2265 	Pos 0.3997	Neg 1.2585 	
+Epoch: [002][180/1000]	Time 0.635	Loss 0.3548 	Accuracy 0.2234 	Pos 0.3995	Neg 1.2595 	
+Epoch: [002][200/1000]	Time 0.630	Loss 0.3546 	Accuracy 0.2270 	Pos 0.3974	Neg 1.2589 	
+Epoch: [002][220/1000]	Time 0.625	Loss 0.3532 	Accuracy 0.2301 	Pos 0.3985	Neg 1.2645 	
+Epoch: [002][240/1000]	Time 0.622	Loss 0.3531 	Accuracy 0.2299 	Pos 0.3962	Neg 1.2651 	
+Epoch: [002][260/1000]	Time 0.619	Loss 0.3525 	Accuracy 0.2323 	Pos 0.3980	Neg 1.2675 	
+Epoch: [002][280/1000]	Time 0.617	Loss 0.3537 	Accuracy 0.2300 	Pos 0.4007	Neg 1.2685 	
+Epoch: [002][300/1000]	Time 0.614	Loss 0.3532 	Accuracy 0.2339 	Pos 0.4001	Neg 1.2706 	
