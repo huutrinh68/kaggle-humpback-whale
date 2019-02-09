@@ -15,7 +15,7 @@ def get_full_name(name):
         raise KeyError("Unknown dataset:", name)
     return __factory[name].__name__
 
-def create(name, root=None, *args, **kwargs):
+def create(name, root=None, mode='train', *args, **kwargs):
     """
     Create a dataset instance.
     """
@@ -24,4 +24,4 @@ def create(name, root=None, *args, **kwargs):
 
     if name not in __factory:
         raise KeyError("Unknown dataset:", name)
-    return __factory[name](root=root, *args, **kwargs)
+    return __factory[name](root=root, mode=mode, *args, **kwargs)

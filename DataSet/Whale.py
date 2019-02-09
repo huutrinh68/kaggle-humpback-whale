@@ -112,7 +112,7 @@ class BBLoader():
         return img
 
 class Whale:
-    def __init__(self, root=None, origin_width=256, width=224, ratio=0.16, transform=None):
+    def __init__(self, root=None, origin_width=256, width=224, ratio=0.16, transform=None, mode='train'):
         # Data loading code
 
         if transform is None:
@@ -123,9 +123,17 @@ class Whale:
         train_csv = os.path.join(root, 'train.csv')
         test_csv  = os.path.join(root, 'sample_submission.csv')
         bb_loader = BBLoader(root)
-        self.train = MyData(root, label_csv=train_csv, transform=transform_Dict['resize_agg'],
+        print(mode)
+        if mode == 'train':
+            transform = transform_Dict['resize_agg']
+        elif mode == 'test':
+            transform = transform_Dict['resize']
+        else:
+            transform = transform_Dict['show']
+
+        self.train = MyData(root, label_csv=train_csv, transform=transform,
                             mode='train', loader=bb_loader.load)
-        self.gallery = MyData(root, label_csv=test_csv, transform=transform_Dict['resize'],
+        self.gallery = MyData(root, label_csv=test_csv, transform=transform,
                               mode='test', loader=bb_loader.load)
 
 def Generate_transform_Dict(origin_width=256, width=224, ratio=0.16):
@@ -141,7 +149,6 @@ def Generate_transform_Dict(origin_width=256, width=224, ratio=0.16):
     transform_dict['resize_agg'] = \
     transforms.Compose([
         transforms.Resize((width,width)),
-        transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(brightness=0.2,
                                contrast=0.01,
                                saturation=0.01,
@@ -153,7 +160,13 @@ def Generate_transform_Dict(origin_width=256, width=224, ratio=0.16):
         transforms.ToTensor(),
         transforms.Normalize(mean=[50/255.0],
                              std=[1.0/255.0])
-])
+    ])
+    transform_dict['show'] = \
+    transforms.Compose([
+        transforms.Resize((width, width)),
+        transforms.Grayscale(3),
+        transforms.ToTensor(),
+    ])
     return transform_dict
 
 def testWhale():
