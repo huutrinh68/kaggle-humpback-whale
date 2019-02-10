@@ -36,15 +36,16 @@ class Embedding(nn.Module):
         self.bn2 = nn.BatchNorm1d(512, eps=1e-5)
         self.linear1 = nn.Linear(in_features=in_dim, out_features=512)
         self.linear2 = nn.Linear(in_features=512, out_features=out_dim)
-        self.dropout = dropout
+        self.dropout1 = nn.Dropout(p=dropout, inplace=True)
+        self.dropout2 = nn.Dropout(p=dropout, inplace=True)
 
     def forward(self, x):
         x = self.bn1(x)
-        x = nn.Dropout(p=self.dropout, inplace=True)(x)
+        x = self.dropout1(x)
         x = self.linear1(x)
         x = F.relu(x, inplace=True)
         x = self.bn2(x)
-        x = nn.Dropout(p=self.dropout, inplace=True)(x)
+        x = self.dropout2(x)
         x = self.linear2(x)
         return x
 
