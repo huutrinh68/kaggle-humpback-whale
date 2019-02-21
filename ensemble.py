@@ -35,7 +35,7 @@ for i, file in enumerate( sub_files ):
     reader = csv.DictReader(open(file,"r"))
     sub[i] = sorted(reader, key=lambda d: str(d[Hlabel]))
 
-out = open("submission_1.csv", "w", newline='')
+out = open("submission_ensem.csv", "w", newline='')
 writer = csv.writer(out)
 writer.writerow([Hlabel,Htarget])
 
