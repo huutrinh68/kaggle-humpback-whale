@@ -3,7 +3,7 @@ import pandas as pd
 import csv
 
 sub_files = [
-                 "./input/submission_855.csv",
+                 "./input/submission_866.csv",
                 #  "./input/submission_822.csv",
                  "./input/submission_875.csv",
                  "./input/submission_842.csv",
@@ -11,7 +11,7 @@ sub_files = [
             ]
 
 sub_weight = [           
-                3*0.855**2,
+                3*0.866**2,
                 # 1*0.822**2,
                 5*0.875**2,
                 2*0.842**2,
